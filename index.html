@@ -1,0 +1,112 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Financeiro Pessoal</title>
+  <link rel="stylesheet" href="style.css">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body>
+  <aside class="sidebar">
+    <div class="brand">FINANCEIRO</div>
+    <nav>
+      <button class="nav active" data-view="dashboard">Dashboard</button>
+      <button class="nav" data-view="lancamentos">Lançamentos</button>
+      <button class="nav" data-view="cartoes">Cartões</button>
+      <button class="nav" data-view="backup">Backup</button>
+    </nav>
+    <div class="sidebar-footer">V1.0 · dados locais</div>
+  </aside>
+
+  <main>
+    <header class="topbar">
+      <div>
+        <div class="eyebrow">FINANÇAS PESSOAIS</div>
+        <h1 id="pageTitle">Dashboard</h1>
+      </div>
+      <div class="month-control">
+        <button id="prevMonth" aria-label="Mês anterior">‹</button>
+        <strong id="currentMonth"></strong>
+        <button id="nextMonth" aria-label="Próximo mês">›</button>
+      </div>
+    </header>
+
+    <section id="dashboard" class="view active-view">
+      <div class="cards">
+        <article class="metric"><span>Receitas</span><strong id="mReceitas">R$ 0,00</strong></article>
+        <article class="metric"><span>Despesas</span><strong id="mDespesas">R$ 0,00</strong></article>
+        <article class="metric"><span>Saldo do mês</span><strong id="mSaldo">R$ 0,00</strong></article>
+        <article class="metric"><span>Lançamentos</span><strong id="mLancamentos">0</strong></article>
+      </div>
+      <div class="grid-2">
+        <article class="panel chart-panel">
+          <div class="panel-head"><h2>Receitas x despesas</h2></div>
+          <canvas id="cashflowChart"></canvas>
+        </article>
+        <article class="panel chart-panel">
+          <div class="panel-head"><h2>Despesas por categoria</h2></div>
+          <canvas id="categoryChart"></canvas>
+        </article>
+      </div>
+      <article class="panel">
+        <div class="panel-head"><h2>Últimos lançamentos</h2><button class="text-btn" data-go="lancamentos">Ver todos</button></div>
+        <div id="recentList" class="list"></div>
+      </article>
+    </section>
+
+    <section id="lancamentos" class="view">
+      <div class="section-actions"><button class="primary" id="newExpense">+ Nova despesa</button><button class="secondary" id="newIncome">+ Nova receita</button></div>
+      <article class="panel">
+        <div class="panel-head"><h2>Lançamentos</h2><select id="typeFilter"><option value="all">Todos</option><option value="expense">Despesas</option><option value="income">Receitas</option></select></div>
+        <div class="table-wrap"><table><thead><tr><th>Data</th><th>Tipo</th><th>Categoria</th><th>Descrição</th><th>Valor</th><th></th></tr></thead><tbody id="transactionsTable"></tbody></table></div>
+      </article>
+    </section>
+
+    <section id="cartoes" class="view">
+      <div class="section-actions"><button class="primary" id="newCard">+ Novo cartão</button></div>
+      <article class="panel">
+        <div class="panel-head"><h2>Cartões</h2></div>
+        <div id="cardsList" class="cards-grid"></div>
+      </article>
+    </section>
+
+    <section id="backup" class="view">
+      <article class="panel backup-panel">
+        <div class="panel-head"><h2>Backup dos dados</h2></div>
+        <p>Os lançamentos e cartões ficam armazenados localmente neste navegador. Exporte um backup regularmente para não depender apenas do armazenamento local.</p>
+        <div class="backup-actions">
+          <button class="primary" id="exportBackup">Exportar backup JSON</button>
+          <label class="secondary file-btn">Importar backup JSON<input type="file" id="importBackup" accept=".json"></label>
+        </div>
+        <div class="notice">O backup contém somente os dados do aplicativo. Ele não é enviado automaticamente ao GitHub.</div>
+      </article>
+    </section>
+  </main>
+
+  <dialog id="transactionDialog">
+    <form method="dialog" id="transactionForm">
+      <div class="dialog-head"><h2 id="transactionTitle">Nova despesa</h2><button type="button" class="close" data-close>×</button></div>
+      <input type="hidden" id="transactionType">
+      <label>Data<input type="date" id="tDate" required></label>
+      <label>Categoria<select id="tCategory"></select></label>
+      <label>Descrição<input type="text" id="tDescription" maxlength="100" placeholder="Ex.: mercado"></label>
+      <label>Valor<input type="number" id="tAmount" min="0.01" step="0.01" required placeholder="0,00"></label>
+      <div class="dialog-actions"><button type="button" class="secondary" data-close>Cancelar</button><button class="primary">Salvar</button></div>
+    </form>
+  </dialog>
+
+  <dialog id="cardDialog">
+    <form method="dialog" id="cardForm">
+      <div class="dialog-head"><h2>Novo cartão</h2><button type="button" class="close" data-close>×</button></div>
+      <label>Cartão<input type="text" id="cName" required placeholder="Ex.: Nubank"></label>
+      <label>Limite<input type="number" id="cLimit" min="0" step="0.01" required></label>
+      <label>Dia de fechamento<input type="number" id="cClosing" min="1" max="31" required></label>
+      <label>Dia de vencimento<input type="number" id="cDue" min="1" max="31" required></label>
+      <div class="dialog-actions"><button type="button" class="secondary" data-close>Cancelar</button><button class="primary">Salvar</button></div>
+    </form>
+  </dialog>
+
+  <script src="app.js"></script>
+</body>
+</html>
