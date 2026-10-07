@@ -16,7 +16,7 @@
       <button class="nav" data-view="cartoes">Cartões</button>
       <button class="nav" data-view="backup">Backup</button>
     </nav>
-    <div class="sidebar-footer">V1.0 · dados locais</div>
+    <div class="sidebar-footer">V1.1 · dados locais</div>
   </aside>
 
   <main>
@@ -32,13 +32,20 @@
       </div>
     </header>
 
+    <!-- DASHBOARD VIEW -->
     <section id="dashboard" class="view active-view">
+      <div class="section-actions" style="margin-bottom: 20px;">
+        <button class="primary" id="newExpense">+ Nova despesa</button>
+        <button class="secondary" id="newIncome">+ Nova receita</button>
+      </div>
+
       <div class="cards">
         <article class="metric"><span>Receitas</span><strong id="mReceitas">R$ 0,00</strong></article>
         <article class="metric"><span>Despesas</span><strong id="mDespesas">R$ 0,00</strong></article>
         <article class="metric"><span>Saldo do mês</span><strong id="mSaldo">R$ 0,00</strong></article>
         <article class="metric"><span>Lançamentos</span><strong id="mLancamentos">0</strong></article>
       </div>
+
       <div class="grid-2">
         <article class="panel chart-panel">
           <div class="panel-head"><h2>Receitas x despesas</h2></div>
@@ -49,43 +56,149 @@
           <canvas id="categoryChart"></canvas>
         </article>
       </div>
+
       <article class="panel">
-        <div class="panel-head"><h2>Últimos lançamentos</h2><button class="text-btn" data-go="lancamentos">Ver todos</button></div>
+        <div class="panel-head">
+          <h2>Últimos lançamentos</h2>
+          <button class="text-btn" data-go="lancamentos">Ver todos</button>
+        </div>
         <div id="recentList" class="list"></div>
       </article>
     </section>
 
+    <!-- LANÇAMENTOS VIEW -->
     <section id="lancamentos" class="view">
-      <div class="section-actions"><button class="primary" id="newExpense">+ Nova despesa</button><button class="secondary" id="newIncome">+ Nova receita</button></div>
+      <div class="section-actions">
+        <button class="primary" data-action="newExpense">+ Nova despesa</button>
+        <button class="secondary" data-action="newIncome">+ Nova receita</button>
+      </div>
+
       <article class="panel">
-        <div class="panel-head"><h2>Lançamentos</h2><select id="typeFilter"><option value="all">Todos</option><option value="expense">Despesas</option><option value="income">Receitas</option></select></div>
-        <div class="table-wrap"><table><thead><tr><th>Data</th><th>Tipo</th><th>Categoria</th><th>Descrição</th><th>Valor</th><th></th></tr></thead><tbody id="transactionsTable"></tbody></table></div>
+        <div class="panel-head">
+          <h2>Lançamentos</h2>
+          <select id="typeFilter">
+            <option value="all">Todos</option>
+            <option value="expense">Despesas</option>
+            <option value="income">Receitas</option>
+          </select>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Data</th>
+                <th>Tipo</th>
+                <th>Categoria</th>
+                <th>Descrição</th>
+                <th>Valor</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody id="transactionsTable"></tbody>
+          </table>
+        </div>
       </article>
     </section>
 
+    <!-- CARTÕES VIEW -->
     <section id="cartoes" class="view">
-      <div class="section-actions"><button class="primary" id="newCard">+ Novo cartão</button></div>
+      <div class="section-actions">
+        <button class="primary" id="newCard">+ Novo cartão</button>
+      </div>
       <article class="panel">
         <div class="panel-head"><h2>Cartões</h2></div>
         <div id="cardsList" class="cards-grid"></div>
       </article>
     </section>
 
+    <!-- BACKUP VIEW -->
     <section id="backup" class="view">
       <article class="panel backup-panel">
         <div class="panel-head"><h2>Backup dos dados</h2></div>
-        <p>Os lançamentos e cartões ficam armazenados localmente neste navegador. Exporte um backup regularmente para não depender apenas do armazenamento local.</p>
+        <p>Os lançamentos e cartões ficam armazenados localmente neste navegador [1, 2]. Exporte um backup regularmente para não depender apenas do armazenamento local [1].</p>
         <div class="backup-actions">
           <button class="primary" id="exportBackup">Exportar backup JSON</button>
           <label class="secondary file-btn">Importar backup JSON<input type="file" id="importBackup" accept=".json"></label>
         </div>
-        <div class="notice">O backup contém somente os dados do aplicativo. Ele não é enviado automaticamente ao GitHub.</div>
+        <div class="notice">O backup contém somente os dados do aplicativo. Ele não é enviado automaticamente ao GitHub [1, 3].</div>
       </article>
     </section>
   </main>
-  
+
+  <!-- MODAL DE LANÇAMENTOS -->
+  <dialog id="transactionDialog">
+    <form method="dialog" id="transactionForm">
+      <div class="dialog-head">
+        <h2 id="transactionTitle">Nova despesa</h2>
+        <button type="button" class="close" data-close>×</button>
+      </div>
+      <input type="hidden" id="transactionType">
+
+      <label>Data
+        <input type="date" id="tDate" required>
+      </label>
+
+      <label>Categoria
+        <select id="tCategory"></select>
+      </label>
+
+      <label id="paymentMethodGroup">Forma de pagamento
+        <select id="tPaymentMethod">
+          <option value="account">Pix / Conta Corrente (Deduz do Saldo)</option>
+          <option value="credit">Cartão de Crédito (Acumula na Fatura)</option>
+        </select>
+      </label>
+
+      <label id="installmentsGroup" style="display: none;">Parcelas
+        <select id="tInstallments">
+          <option value="1">1x (À vista no cartão)</option>
+          <option value="2">2x</option>
+          <option value="3">3x</option>
+          <option value="4">4x</option>
+          <option value="5">5x</option>
+          <option value="6">6x</option>
+          <option value="7">7x</option>
+          <option value="8">8x</option>
+          <option value="9">9x</option>
+          <option value="10">10x</option>
+          <option value="11">11x</option>
+          <option value="12">12x</option>
+        </select>
+      </label>
+
+      <label>Descrição
+        <input type="text" id="tDescription" maxlength="100" placeholder="Ex.: Mercado / Geladeira">
+      </label>
+
+      <label>Valor Total
+        <input type="number" id="tAmount" min="0.01" step="0.01" required placeholder="0,00">
+      </label>
+
+      <div class="dialog-actions">
+        <button type="button" class="secondary" data-close>Cancelar</button>
+        <button class="primary" type="submit">Salvar</button>
+      </div>
+    </form>
   </dialog>
-  
+
+  <!-- MODAL DE CARTÃO -->
+  <dialog id="cardDialog">
+    <form method="dialog" id="cardForm">
+      <div class="dialog-head">
+        <h2>Novo cartão</h2>
+        <button type="button" class="close" data-close>×</button>
+      </div>
+      <label>Cartão<input type="text" id="cName" required placeholder="Ex.: Nubank"></label>
+      <label>Limite<input type="number" id="cLimit" min="0" step="0.01" required></label>
+      <label>Dia de fechamento<input type="number" id="cClosing" min="1" max="31" required></label>
+      <label>Dia de vencimento<input type="number" id="cDue" min="1" max="31" required></label>
+      <div class="dialog-actions">
+        <button type="button" class="secondary" data-close>Cancelar</button>
+        <button class="primary" type="submit">Salvar</button>
+      </div>
+    </form>
+  </dialog>
+
   <script src="app.js"></script>
 </body>
 </html>
