@@ -83,19 +83,9 @@
       </article>
     </section>
   </main>
-
+  
   </dialog>
-  <dialog id="cardDialog">
-    <form method="dialog" id="cardForm">
-      <div class="dialog-head"><h2>Novo cartão</h2><button type="button" class="close" data-close>×</button></div>
-      <label>Cartão<input type="text" id="cName" required placeholder="Ex.: Nubank"></label>
-      <label>Limite<input type="number" id="cLimit" min="0" step="0.01" required></label>
-      <label>Dia de fechamento<input type="number" id="cClosing" min="1" max="31" required></label>
-      <label>Dia de vencimento<input type="number" id="cDue" min="1" max="31" required></label>
-      <div class="dialog-actions"><button type="button" class="secondary" data-close>Cancelar</button><button class="primary">Salvar</button></div>
-    </form>
-  </dialog>
-
+  
   <script src="app.js"></script>
 </body>
 </html>
