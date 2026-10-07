@@ -2,8 +2,19 @@
 <html lang="pt-BR">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
   <title>Financeiro Pessoal</title>
+
+  <!-- PWA & Configurações Mobile -->
+  <link rel="manifest" href="manifest.json">
+  <meta name="theme-color" content="#0f172a">
+
+  <!-- Meta Tags Específicas para iOS / Safari (iPhone) -->
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Finanças">
+  <link rel="apple-touch-icon" href="icon-192.png">
+
   <link rel="stylesheet" href="style.css">
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 </head>
@@ -16,7 +27,7 @@
       <button class="nav" data-view="cartoes">Cartões</button>
       <button class="nav" data-view="backup">Backup</button>
     </nav>
-    <div class="sidebar-footer">V1.1 · dados locais</div>
+    <div class="sidebar-footer">V1.1 PWA · dados locais</div>
   </aside>
 
   <main>
@@ -115,12 +126,12 @@
     <section id="backup" class="view">
       <article class="panel backup-panel">
         <div class="panel-head"><h2>Backup dos dados</h2></div>
-        <p>Os lançamentos e cartões ficam armazenados localmente neste navegador [1, 2]. Exporte um backup regularmente para não depender apenas do armazenamento local [1].</p>
+        <p>Os lançamentos e cartões ficam armazenados localmente neste navegador. Exporte um backup regularmente para não depender apenas do armazenamento local.</p>
         <div class="backup-actions">
           <button class="primary" id="exportBackup">Exportar backup JSON</button>
           <label class="secondary file-btn">Importar backup JSON<input type="file" id="importBackup" accept=".json"></label>
         </div>
-        <div class="notice">O backup contém somente os dados do aplicativo. Ele não é enviado automaticamente ao GitHub [1, 3].</div>
+        <div class="notice">O backup contém somente os dados do aplicativo. Ele não é enviado automaticamente ao GitHub.</div>
       </article>
     </section>
   </main>
@@ -200,5 +211,16 @@
   </dialog>
 
   <script src="app.js"></script>
+  <script>
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('./sw.js').then(reg => {
+          console.log('Service Worker registrado com sucesso!');
+        }).catch(err => {
+          console.warn('Erro ao registrar Service Worker:', err);
+        });
+      });
+    }
+  </script>
 </body>
 </html>
