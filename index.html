@@ -84,26 +84,7 @@
     </section>
   </main>
 
-  <dialog id="transactionDialog">
-   <form method="dialog" id="transactionForm">
-  <div class="dialog-head"><h2 id="transactionTitle">Nova despesa</h2><button type="button" class="close" data-close>×</button></div>
-  <input type="hidden" id="transactionType">
-  <label>Data<input type="date" id="tDate" required></label>
-  <label>Categoria<select id="tCategory"></select></label>
-  
-  <label>Forma de pagamento
-    <select id="tPaymentMethod">
-      <option value="account">Pix / Conta Corrente (Deduz do Saldo)</option>
-      <option value="credit">Cartão de Crédito (Acumula na Fatura)</option>
-    </select>
-  </label>
-  
-  <label>Descrição<input type="text" id="tDescription" maxlength="100" placeholder="Ex.: mercado"></label>
-  <label>Valor<input type="number" id="tAmount" min="0.01" step="0.01" required placeholder="0,00"></label>
-  <div class="dialog-actions"><button type="button" class="secondary" data-close>Cancelar</button><button class="primary">Salvar</button></div>
-</form>
   </dialog>
-
   <dialog id="cardDialog">
     <form method="dialog" id="cardForm">
       <div class="dialog-head"><h2>Novo cartão</h2><button type="button" class="close" data-close>×</button></div>
