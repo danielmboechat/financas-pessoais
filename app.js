@@ -5,11 +5,7 @@ let db, currentDate = new Date(), cashflowChart, categoryChart;
 
 const $ = id => document.getElementById(id);
 const money = v => new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(Number(v) || 0);
-const dateBR = s => {
-  if (!s) return "";
-  const [y, m, d] = s.split("-");
-  return `${d}/${m}/${y}`;
-};
+const dateBR = s => new Date(s + "T12:00:00").toLocaleDateString("pt-BR");
 const monthKey = d => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
 const monthName = d => d.toLocaleDateString("pt-BR", { month: "long", year: "numeric" }).replace(/^./, x => x.toUpperCase());
 
@@ -32,7 +28,7 @@ function openDB() {
 }
 
 const store = (name, mode = "readonly") => db.transaction(name, mode).objectStore(name);
-const getAll = name => new Promise((res, rej) => { const r = store(name).getAll(); r.onsuccess = () => res(r.result || []); r.onerror = () => rej(r.error); });
+const getAll = name => new Promise((res, rej) => { const r = store(name).getAll(); r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error); });
 const add = (name, obj) => new Promise((res, rej) => { const r = store(name, "readwrite").add(obj); r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error); });
 const remove = (name, id) => new Promise((res, rej) => { const r = store(name, "readwrite").delete(id); r.onsuccess = () => res(); r.onerror = () => rej(r.error); });
 
@@ -45,116 +41,162 @@ function setupNav() {
   });
   document.querySelectorAll("[data-close]").forEach(b => {
     b.onclick = () => {
-      const dlg = b.closest("dialog");
-      if (dlg) dlg.close();
+      const dialog = b.closest("dialog");
+      if (dialog) dialog.close();
     };
   });
 }
 
 function showView(id) {
-  const target = $(id);
-  if (!target) return;
   document.querySelectorAll(".view").forEach(v => v.classList.remove("active-view"));
-  target.classList.add("active-view");
+  const targetView = $(id);
+  if (targetView) targetView.classList.add("active-view");
   document.querySelectorAll(".nav").forEach(b => b.classList.toggle("active", b.dataset.view === id));
-  
-  const titleElem = $("pageTitle");
-  if (titleElem) {
-    titleElem.textContent = { dashboard: "Dashboard", lancamentos: "Lançamentos", cartoes: "Cartões", backup: "Backup" }[id] || "Financeiro";
+  const pageTitle = $("pageTitle");
+  if (pageTitle) {
+    pageTitle.textContent = { dashboard: "Dashboard", lancamentos: "Lançamentos", cartoes: "Cartões", backup: "Backup" }[id] || "Dashboard";
   }
-  
   if (id === "dashboard") renderDashboard();
   if (id === "lancamentos") renderTransactions();
   if (id === "cartoes") renderCards();
 }
 
-function toggleInstallmentsVisibility() {
-  const type = $("transactionType")?.value;
+window.openTransaction = function(type) {
+  const title = $("transactionTitle");
+  if (title) title.textContent = type === "expense" ? "Nova despesa" : "Nova receita";
+  
+  const typeInput = $("transactionType");
+  if (typeInput) typeInput.value = type;
+  
+  const dateInput = $("tDate");
+  if (dateInput) dateInput.value = new Date().toISOString().slice(0, 10);
+  
+  const catInput = $("tCategory");
+  if (catInput) {
+    catInput.innerHTML = (type === "expense" ? CATEGORIES : INCOME_CATEGORIES)
+      .map(x => `<option value="${x}">${x}</option>`).join("");
+  }
+  
   const pmElem = $("tPaymentMethod");
-  const instGroup = $("installmentsGroup") || $("tInstallments")?.closest("label");
-  const pmGroup = $("paymentMethodGroup") || pmElem?.closest("label");
+  const pmGroup = $("paymentMethodGroup") || (pmElem ? pmElem.closest("label") : null);
+  const instElem = $("tInstallments");
+  const instGroup = $("installmentsGroup") || (instElem ? instElem.closest("label") : null);
 
-  if (pmGroup) {
-    pmGroup.style.display = (type === "expense") ? "block" : "none";
+  if (type === "expense") {
+    if (pmGroup) pmGroup.style.display = "block";
+    if (pmElem) pmElem.value = "account";
+    if (instGroup) instGroup.style.display = "none";
+    if (instElem) instElem.value = "1";
+  } else {
+    if (pmGroup) pmGroup.style.display = "none";
+    if (instGroup) instGroup.style.display = "none";
   }
-  if (instGroup) {
-    instGroup.style.display = (type === "expense" && pmElem && pmElem.value === "credit") ? "block" : "none";
+
+  const dialog = $("transactionDialog");
+  if (dialog && typeof dialog.showModal === "function") {
+    dialog.showModal();
   }
-}
+};
 
 function setupForms() {
   const btnExpense = $("newExpense");
-  if (btnExpense) btnExpense.onclick = () => openTransaction("expense");
-
+  if (btnExpense) btnExpense.onclick = () => window.openTransaction("expense");
+  
   const btnIncome = $("newIncome");
-  if (btnIncome) btnIncome.onclick = () => openTransaction("income");
-
+  if (btnIncome) btnIncome.onclick = () => window.openTransaction("income");
+  
   const btnCard = $("newCard");
-  if (btnCard) btnCard.onclick = () => $("cardDialog")?.showModal();
+  if (btnCard) {
+    btnCard.onclick = () => {
+      const cardDialog = $("cardDialog");
+      if (cardDialog && typeof cardDialog.showModal === "function") cardDialog.showModal();
+    };
+  }
 
   const pmElem = $("tPaymentMethod");
   if (pmElem) {
-    pmElem.onchange = toggleInstallmentsVisibility;
+    pmElem.onchange = () => {
+      const instElem = $("tInstallments");
+      const instGroup = $("installmentsGroup") || (instElem ? instElem.closest("label") : null);
+      if (instGroup) {
+        instGroup.style.display = pmElem.value === "credit" ? "block" : "none";
+      }
+    };
   }
+
+  // Global click listener fallback in case IDs differ or dynamic elements exist
+  document.addEventListener("click", e => {
+    const btn = e.target.closest("#newExpense, #newIncome, [data-open-expense], [data-open-income]");
+    if (btn) {
+      if (btn.id === "newExpense" || btn.hasAttribute("data-open-expense")) window.openTransaction("expense");
+      if (btn.id === "newIncome" || btn.hasAttribute("data-open-income")) window.openTransaction("income");
+    }
+  });
 
   const txForm = $("transactionForm");
   if (txForm) {
     txForm.onsubmit = async e => {
       e.preventDefault();
-      const type = $("transactionType")?.value || "expense";
+      const type = $("transactionType") ? $("transactionType").value : "expense";
+      const pmElem = $("tPaymentMethod");
       const paymentMethod = (type === "expense" && pmElem) ? pmElem.value : "account";
-      const totalAmount = Number($("tAmount")?.value || 0);
-      const baseDateStr = $("tDate")?.value || new Date().toISOString().slice(0, 10);
-      const category = $("tCategory")?.value || "Outros";
-      const description = ($("tDescription")?.value || "").trim();
-      const installmentsCount = (type === "expense" && paymentMethod === "credit" && $("tInstallments")) 
-        ? Math.max(1, parseInt($("tInstallments").value) || 1) 
-        : 1;
+      const instElem = $("tInstallments");
+      const installments = (type === "expense" && paymentMethod === "credit" && instElem) ? (parseInt(instElem.value) || 1) : 1;
+      
+      const rawDate = $("tDate").value;
+      const category = $("tCategory").value;
+      const description = $("tDescription").value.trim();
+      const totalAmount = Number($("tAmount").value);
 
       const cards = await getAll("cards");
-      const card = cards[0]; // único cartão
-      const closingDay = card ? Number(card.closing) : null;
+      const primaryCard = cards.length ? cards[0] : null;
+      const closingDay = primaryCard ? Number(primaryCard.closing) : 31;
 
-      const [y, m, d] = baseDateStr.split("-").map(Number);
-      let startYear = y;
-      let startMonth = m - 1; // 0-indexed month
-
-      if (paymentMethod === "credit" && closingDay && d >= closingDay) {
-        startMonth += 1;
-        if (startMonth > 11) {
-          startMonth = 0;
-          startYear += 1;
+      if (type === "expense" && paymentMethod === "credit" && installments > 1) {
+        const installmentAmount = Number((totalAmount / installments).toFixed(2));
+        let baseDate = new Date(rawDate + "T12:00:00");
+        
+        if (baseDate.getDate() > closingDay) {
+          baseDate.setMonth(baseDate.getMonth() + 1);
         }
-      }
 
-      const installmentAmount = Math.round((totalAmount / installmentsCount) * 100) / 100;
-      let remainder = Math.round((totalAmount - installmentAmount * installmentsCount) * 100) / 100;
-
-      for (let i = 1; i <= installmentsCount; i++) {
-        let curM = startMonth + (i - 1);
-        let curY = startYear + Math.floor(curM / 12);
-        curM = ((curM % 12) + 12) % 12;
-
-        const targetDay = Math.min(d, new Date(curY, curM + 1, 0).getDate());
-        const instDateStr = `${curY}-${String(curM + 1).padStart(2, "0")}-${String(targetDay).padStart(2, "0")}`;
-
-        const itemAmount = (i === 1) ? Math.round((installmentAmount + remainder) * 100) / 100 : installmentAmount;
-        const itemDesc = installmentsCount > 1 
-          ? `${description || category} (${i}/${installmentsCount})` 
-          : (description || category);
+        for (let i = 0; i < installments; i++) {
+          let instDate = new Date(baseDate);
+          instDate.setMonth(baseDate.getMonth() + i);
+          const formattedDate = instDate.toISOString().slice(0, 10);
+          
+          await add("transactions", {
+            type: "expense",
+            date: formattedDate,
+            category: category,
+            paymentMethod: "credit",
+            description: `${description || category} (${i + 1}/${installments})`,
+            amount: installmentAmount
+          });
+        }
+      } else {
+        let finalDate = rawDate;
+        if (type === "expense" && paymentMethod === "credit" && closingDay) {
+          let checkDate = new Date(rawDate + "T12:00:00");
+          if (checkDate.getDate() > closingDay) {
+            checkDate.setMonth(checkDate.getMonth() + 1);
+            finalDate = checkDate.toISOString().slice(0, 10);
+          }
+        }
 
         await add("transactions", {
-          type,
-          date: instDateStr,
-          category,
-          paymentMethod,
-          description: itemDesc,
-          amount: itemAmount
+          type: type,
+          date: finalDate,
+          category: category,
+          paymentMethod: paymentMethod,
+          description: description,
+          amount: totalAmount
         });
       }
 
-      $("transactionDialog")?.close();
-      txForm.reset();
+      const dialog = $("transactionDialog");
+      if (dialog) dialog.close();
+      e.target.reset();
       await refresh();
     };
   }
@@ -164,83 +206,37 @@ function setupForms() {
     cardForm.onsubmit = async e => {
       e.preventDefault();
       await add("cards", {
-        name: ($("cName")?.value || "Cartão").trim(),
-        limit: Number($("cLimit")?.value || 0),
-        closing: Number($("cClosing")?.value || 1),
-        due: Number($("cDue")?.value || 10)
+        name: $("cName").value.trim(),
+        limit: Number($("cLimit").value),
+        closing: Number($("cClosing").value),
+        due: Number($("cDue").value)
       });
-      $("cardDialog")?.close();
-      cardForm.reset();
+      const dialog = $("cardDialog");
+      if (dialog) dialog.close();
+      e.target.reset();
       await renderCards();
     };
   }
 
-  const filterElem = $("typeFilter");
-  if (filterElem) filterElem.onchange = renderTransactions;
-
-  const btnExport = $("exportBackup");
-  if (btnExport) btnExport.onclick = exportBackup;
-
-  const btnImport = $("importBackup");
-  if (btnImport) btnImport.onchange = importBackup;
-
-  const btnPrev = $("prevMonth");
-  if (btnPrev) btnPrev.onclick = () => { currentDate.setMonth(currentDate.getMonth() - 1); refresh(); };
-
-  const btnNext = $("nextMonth");
-  if (btnNext) btnNext.onclick = () => { currentDate.setMonth(currentDate.getMonth() + 1); refresh(); };
-}
-
-function openTransaction(type) {
-  const title = $("transactionTitle");
-  if (title) title.textContent = type === "expense" ? "Nova despesa" : "Nova receita";
-
-  const typeInput = $("transactionType");
-  if (typeInput) typeInput.value = type;
-
-  const dateInput = $("tDate");
-  if (dateInput) dateInput.value = new Date().toISOString().slice(0, 10);
-
-  const catSelect = $("tCategory");
-  if (catSelect) {
-    catSelect.innerHTML = (type === "expense" ? CATEGORIES : INCOME_CATEGORIES)
-      .map(x => `<option value="${x}">${x}</option>`).join("");
-  }
-
-  const pmElem = $("tPaymentMethod");
-  if (pmElem) pmElem.value = "account";
-
-  const instElem = $("tInstallments");
-  if (instElem) instElem.value = "1";
-
-  toggleInstallmentsVisibility();
-
-  const dlg = $("transactionDialog");
-  if (dlg) {
-    if (typeof dlg.showModal === "function") {
-      dlg.showModal();
-    } else {
-      dlg.setAttribute("open", "true");
-    }
-  }
+  if ($("typeFilter")) $("typeFilter").onchange = renderTransactions;
+  if ($("exportBackup")) $("exportBackup").onclick = exportBackup;
+  if ($("importBackup")) $("importBackup").onchange = importBackup;
+  if ($("prevMonth")) $("prevMonth").onclick = () => { currentDate.setMonth(currentDate.getMonth() - 1); refresh(); };
+  if ($("nextMonth")) $("nextMonth").onclick = () => { currentDate.setMonth(currentDate.getMonth() + 1); refresh(); };
 }
 
 async function refresh() {
-  const monthElem = $("currentMonth");
-  if (monthElem) monthElem.textContent = monthName(currentDate);
-
+  if ($("currentMonth")) $("currentMonth").textContent = monthName(currentDate);
   await renderDashboard();
   await renderTransactions();
   await renderCards();
 }
 
 async function renderDashboard() {
-  const all = await getAll("transactions");
-  const key = monthKey(currentDate);
-  const tx = all.filter(x => x.date && x.date.startsWith(key));
-
+  const all = await getAll("transactions"), key = monthKey(currentDate), tx = all.filter(x => x.date && x.date.startsWith(key));
   const income = tx.filter(x => x.type === "income").reduce((a, x) => a + x.amount, 0);
   const expense = tx.filter(x => x.type === "expense").reduce((a, x) => a + x.amount, 0);
+  
   const accountExpense = tx.filter(x => x.type === "expense" && x.paymentMethod !== "credit").reduce((a, x) => a + x.amount, 0);
   const balance = income - accountExpense;
 
@@ -250,53 +246,52 @@ async function renderDashboard() {
   if ($("mLancamentos")) $("mLancamentos").textContent = tx.length;
 
   const byCat = {};
-  tx.filter(x => x.type === "expense").forEach(x => {
-    byCat[x.category] = (byCat[x.category] || 0) + x.amount;
-  });
+  tx.filter(x => x.type === "expense").forEach(x => byCat[x.category] = (byCat[x.category] || 0) + x.amount);
 
-  cashflowChart?.destroy();
-  categoryChart?.destroy();
+  if (typeof Chart !== "undefined") {
+    cashflowChart?.destroy();
+    categoryChart?.destroy();
 
-  const cashCtx = $("cashflowChart");
-  if (cashCtx && typeof Chart !== "undefined") {
-    cashflowChart = new Chart(cashCtx, {
-      type: "bar",
-      data: {
-        labels: ["Receitas", "Despesas Totais", "Despesas Conta"],
-        datasets: [{
-          data: [income, expense, accountExpense],
-          backgroundColor: ["#18794e", "#a33b3b", "#2b6cb0"]
-        }]
-      },
-      options: {
-        plugins: { legend: { display: false } },
-        responsive: true,
-        maintainAspectRatio: false
-      }
-    });
+    const cashElem = $("cashflowChart");
+    if (cashElem) {
+      cashflowChart = new Chart(cashElem, {
+        type: "bar",
+        data: {
+          labels: ["Receitas", "Despesas Totais", "Despesas Conta"],
+          datasets: [{
+            data: [income, expense, accountExpense],
+            backgroundColor: ["#18794e", "#a33b3b", "#2b6cb0"]
+          }]
+        },
+        options: {
+          plugins: { legend: { display: false } },
+          responsive: true,
+          maintainAspectRatio: false
+        }
+      });
+    }
+
+    const catElem = $("categoryChart");
+    if (catElem) {
+      categoryChart = new Chart(catElem, {
+        type: "doughnut",
+        data: {
+          labels: Object.keys(byCat).length ? Object.keys(byCat) : ["Sem despesas"],
+          datasets: [{
+            data: Object.values(byCat).length ? Object.values(byCat) : [1]
+          }]
+        },
+        options: {
+          plugins: { legend: { position: "bottom" } },
+          responsive: true
+        }
+      });
+    }
   }
 
-  const catCtx = $("categoryChart");
-  if (catCtx && typeof Chart !== "undefined") {
-    categoryChart = new Chart(catCtx, {
-      type: "doughnut",
-      data: {
-        labels: Object.keys(byCat).length ? Object.keys(byCat) : ["Sem despesas"],
-        datasets: [{
-          data: Object.values(byCat).length ? Object.values(byCat) : [1]
-        }]
-      },
-      options: {
-        plugins: { legend: { position: "bottom" } },
-        responsive: true
-      }
-    });
-  }
-
-  const recentList = $("recentList");
-  if (recentList) {
-    const recent = [...tx].sort((a, b) => b.date.localeCompare(a.date)).slice(0, 6);
-    recentList.innerHTML = recent.length ? recent.map(x => `
+  const recent = [...tx].sort((a, b) => b.date.localeCompare(a.date)).slice(0, 6);
+  if ($("recentList")) {
+    $("recentList").innerHTML = recent.length ? recent.map(x => `
       <div class="list-row">
         <span class="muted">${dateBR(x.date)}</span>
         <span>${x.description || x.category} ${x.paymentMethod === 'credit' ? '<small class="tag">Cartão</small>' : ''}</span>
@@ -306,17 +301,13 @@ async function renderDashboard() {
 }
 
 async function renderTransactions() {
-  const all = await getAll("transactions");
-  const key = monthKey(currentDate);
+  const all = await getAll("transactions"), key = monthKey(currentDate);
   const filterElem = $("typeFilter");
   const filter = filterElem ? filterElem.value : "all";
-
-  let tx = all.filter(x => x.date && x.date.startsWith(key) && (filter === "all" || x.type === filter))
-             .sort((a, b) => b.date.localeCompare(a.date));
-
-  const table = $("transactionsTable");
-  if (table) {
-    table.innerHTML = tx.length ? tx.map(x => `
+  let tx = all.filter(x => x.date && x.date.startsWith(key) && (filter === "all" || x.type === filter)).sort((a, b) => b.date.localeCompare(a.date));
+  
+  if ($("transactionsTable")) {
+    $("transactionsTable").innerHTML = tx.length ? tx.map(x => `
       <tr>
         <td>${dateBR(x.date)}</td>
         <td><span class="tag">${x.type === "income" ? "Receita" : "Despesa"}</span></td>
@@ -326,13 +317,11 @@ async function renderTransactions() {
         <td><button class="delete" data-delete="${x.id}">Excluir</button></td>
       </tr>`).join("") : `<tr><td colspan="6" class="muted">Nenhum lançamento.</td></tr>`;
 
-    table.querySelectorAll("[data-delete]").forEach(b => {
-      b.onclick = async () => {
-        if (confirm("Excluir este lançamento?")) {
-          await remove("transactions", Number(b.dataset.delete));
-          await refresh();
-        }
-      };
+    document.querySelectorAll("[data-delete]").forEach(b => b.onclick = async () => {
+      if (confirm("Excluir este lançamento?")) {
+        await remove("transactions", Number(b.dataset.delete));
+        await refresh();
+      }
     });
   }
 }
@@ -345,26 +334,28 @@ async function renderCards() {
   const creditTx = allTx.filter(x => x.date && x.date.startsWith(key) && x.type === "expense" && x.paymentMethod === "credit");
   const totalCreditMonth = creditTx.reduce((a, x) => a + x.amount, 0);
 
-  const cardsList = $("cardsList");
-  if (cardsList) {
-    cardsList.innerHTML = cards.length ? cards.map(c => `
+  const todayKey = monthKey(new Date());
+  const futureCreditTx = allTx.filter(x => x.date && x.date >= todayKey && x.type === "expense" && x.paymentMethod === "credit");
+  const totalCommitted = futureCreditTx.reduce((a, x) => a + x.amount, 0);
+
+  if ($("cardsList")) {
+    $("cardsList").innerHTML = cards.length ? cards.map(c => `
       <div class="credit-card">
         <h3>${c.name}</h3>
         <p><span>Limite Total</span><strong>${money(c.limit)}</strong></p>
         <p><span>Fechamento</span><strong>dia ${c.closing}</strong></p>
         <p><span>Vencimento</span><strong>dia ${c.due}</strong></p>
         <p><span>Fatura do Mês</span><strong>${money(totalCreditMonth)}</strong></p>
-        <p><span>Limite Disponível</span><strong>${money(c.limit - totalCreditMonth)}</strong></p>
+        <p><span>Limite Comprometido (Futuro)</span><strong>${money(totalCommitted)}</strong></p>
+        <p><span>Limite Disponível</span><strong>${money(c.limit - totalCommitted)}</strong></p>
         <button class="delete" style="margin-top:10px;" data-card-delete="${c.id}">Excluir cartão</button>
       </div>`).join("") : `<div class="muted">Nenhum cartão cadastrado.</div>`;
 
-    cardsList.querySelectorAll("[data-card-delete]").forEach(b => {
-      b.onclick = async () => {
-        if (confirm("Excluir este cartão?")) {
-          await remove("cards", Number(b.dataset.cardDelete));
-          await renderCards();
-        }
-      };
+    document.querySelectorAll("[data-card-delete]").forEach(b => b.onclick = async () => {
+      if (confirm("Excluir este cartão?")) {
+        await remove("cards", Number(b.dataset.cardDelete));
+        await renderCards();
+      }
     });
   }
 }
@@ -392,13 +383,12 @@ function importBackup(e) {
     try {
       const d = JSON.parse(r.result);
       if (!Array.isArray(d.transactions) || !Array.isArray(d.cards)) throw Error();
-      const txStore = store("transactions", "readwrite");
-      const cardStore = store("cards", "readwrite");
-      (await getAll("transactions")).forEach(x => txStore.delete(x.id));
-      (await getAll("cards")).forEach(x => cardStore.delete(x.id));
-      d.transactions.forEach(x => { delete x.id; txStore.add(x); });
-      d.cards.forEach(x => { delete x.id; cardStore.add(x); });
-      txStore.transaction.oncomplete = async () => {
+      const tx = store("transactions", "readwrite"), cards = store("cards", "readwrite");
+      (await getAll("transactions")).forEach(x => tx.delete(x.id));
+      (await getAll("cards")).forEach(x => cards.delete(x.id));
+      d.transactions.forEach(x => { delete x.id; tx.add(x); });
+      d.cards.forEach(x => { delete x.id; cards.add(x); });
+      tx.transaction.oncomplete = async () => {
         alert("Backup restaurado com sucesso.");
         await refresh();
       };
@@ -410,13 +400,14 @@ function importBackup(e) {
   e.target.value = "";
 }
 
-document.addEventListener("DOMContentLoaded", async () => {
+function initApp() {
   setupNav();
   setupForms();
-  try {
-    await openDB();
-    await refresh();
-  } catch (err) {
-    console.error("Erro ao inicializar o banco:", err);
-  }
-});
+  openDB().then(() => refresh()).catch(err => console.error("DB Error:", err));
+}
+
+if (document.readyState === "loading") {
+  document.addEventListener("DOMContentLoaded", initApp);
+} else {
+  initApp();
+}
