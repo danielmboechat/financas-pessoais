@@ -6,9 +6,9 @@ let db, currentDate = new Date(), cashflowChart, categoryChart;
 const $ = id => document.getElementById(id);
 const money = v => new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(Number(v) || 0);
 const dateBR = s => {
-  if (!s) return "—";
-  const [y, m, d] = s.split("-");
-  return y && m && d ? `${d}/${m}/${y}` : s;
+  if (!s) return "";
+  const parts = s.split("-");
+  return parts.length === 3 ? `${parts[2]}/${parts[1]}/${parts[0]}` : s;
 };
 const monthKey = d => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
 const monthName = d => d.toLocaleDateString("pt-BR", { month: "long", year: "numeric" }).replace(/^./, x => x.toUpperCase());
@@ -32,24 +32,31 @@ function openDB() {
 }
 
 const store = (name, mode = "readonly") => db.transaction(name, mode).objectStore(name);
-const getAll = name => new Promise((res, rej) => { const r = store(name).getAll(); r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error); });
+const getAll = name => new Promise((res, rej) => { const r = store(name).getAll(); r.onsuccess = () => res(r.result || []); r.onerror = () => rej(r.error); });
 const add = (name, obj) => new Promise((res, rej) => { const r = store(name, "readwrite").add(obj); r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error); });
 const remove = (name, id) => new Promise((res, rej) => { const r = store(name, "readwrite").delete(id); r.onsuccess = () => res(); r.onerror = () => rej(r.error); });
 
 function setupNav() {
   document.querySelectorAll(".nav").forEach(b => b.onclick = () => showView(b.dataset.view));
   document.querySelectorAll("[data-go]").forEach(b => b.onclick = () => showView(b.dataset.go));
-  document.querySelectorAll("[data-close]").forEach(b => b.closest("dialog")?.close());
+  document.querySelectorAll("[data-close]").forEach(b => b.onclick = () => {
+    const dlg = b.closest("dialog");
+    if (dlg) dlg.close();
+  });
 }
 
 function showView(id) {
+  const target = $(id);
+  if (!target) return;
   document.querySelectorAll(".view").forEach(v => v.classList.remove("active-view"));
-  const viewElem = $(id);
-  if (viewElem) viewElem.classList.add("active-view");
+  target.classList.add("active-view");
   document.querySelectorAll(".nav").forEach(b => b.classList.toggle("active", b.dataset.view === id));
   
-  const titles = { dashboard: "Dashboard", lancamentos: "Lançamentos", cartoes: "Cartões", backup: "Backup" };
-  if ($("pageTitle")) $("pageTitle").textContent = titles[id] || "Dashboard";
+  const titleElem = $("pageTitle");
+  if (titleElem) {
+    const titles = { dashboard: "Dashboard", lancamentos: "Lançamentos", cartoes: "Cartões", backup: "Backup" };
+    titleElem.textContent = titles[id] || "Dashboard";
+  }
   
   if (id === "dashboard") renderDashboard();
   if (id === "lancamentos") renderTransactions();
@@ -57,81 +64,72 @@ function showView(id) {
 }
 
 function setupForms() {
+  // Global click delegate for action buttons
   document.addEventListener("click", e => {
     const btn = e.target.closest("button, [data-action]");
     if (!btn) return;
-    const action = btn.dataset.action || btn.id;
-    if (action === "newExpense" || btn.textContent.includes("Nova despesa")) {
+
+    if (btn.id === "newExpense" || btn.dataset.action === "newExpense") {
       openTransaction("expense");
-    } else if (action === "newIncome" || btn.textContent.includes("Nova receita")) {
+    } else if (btn.id === "newIncome" || btn.dataset.action === "newIncome") {
       openTransaction("income");
-    } else if (action === "newCard" || btn.textContent.includes("Novo cartão")) {
-      $("cardDialog")?.showModal();
+    } else if (btn.id === "newCard" || btn.dataset.action === "newCard") {
+      const dlg = $("cardDialog");
+      if (dlg && typeof dlg.showModal === "function") dlg.showModal();
     }
   });
-
-  const pmElem = $("tPaymentMethod");
-  if (pmElem) {
-    pmElem.onchange = () => {
-      const instGroup = $("installmentsGroup");
-      if (instGroup) {
-        instGroup.style.display = pmElem.value === "credit" ? "block" : "none";
-      }
-    };
-  }
 
   const txForm = $("transactionForm");
   if (txForm) {
     txForm.onsubmit = async e => {
       e.preventDefault();
-      const type = $("transactionType")?.value || "expense";
-      const pmVal = (type === "expense" && $("tPaymentMethod")) ? $("tPaymentMethod").value : "account";
-      const installments = (type === "expense" && pmVal === "credit" && $("tInstallments")) ? Number($("tInstallments").value) || 1 : 1;
-      
-      const baseDateStr = $("tDate")?.value || new Date().toISOString().slice(0, 10);
-      const catVal = $("tCategory")?.value || "Outros";
-      const descVal = $("tDescription")?.value.trim() || "";
-      const totalAmount = Number($("tAmount")?.value) || 0;
+      const type = $("transactionType") ? $("transactionType").value : "expense";
+      const pmElem = $("tPaymentMethod");
+      const instElem = $("tInstallments");
+      const paymentMethod = (type === "expense" && pmElem) ? pmElem.value : "account";
+      const totalAmount = Number($("tAmount").value) || 0;
+      const baseDateStr = $("tDate").value;
+      const category = $("tCategory").value;
+      const rawDesc = $("tDescription").value.trim();
 
-      if (installments > 1) {
-        const perInstallmentAmount = Math.round((totalAmount / installments) * 100) / 100;
-        const cards = await getAll("cards");
-        const closingDay = cards.length > 0 ? (cards[0].closing || 30) : 30;
+      const numInstallments = (type === "expense" && paymentMethod === "credit" && instElem)
+        ? Math.max(1, parseInt(instElem.value, 10) || 1)
+        : 1;
 
-        let [y, m, d] = baseDateStr.split("-").map(Number);
-        if (d > closingDay) {
-          m += 1;
-          if (m > 12) { m = 1; y += 1; }
-        }
+      if (numInstallments > 1) {
+        const installmentAmount = Math.round((totalAmount / numInstallments) * 100) / 100;
+        const [y, m, d] = baseDateStr.split("-").map(Number);
 
-        for (let i = 1; i <= installments; i++) {
-          const instDateStr = `${y}-${String(m).padStart(2, "0")}-${String(Math.min(d, 28)).padStart(2, "0")}`;
-          const itemDesc = descVal ? `${descVal} (${i}/${installments})` : `${catVal} (${i}/${installments})`;
+        for (let i = 1; i <= numInstallments; i++) {
+          const instDate = new Date(y, (m - 1) + (i - 1), d);
+          const yyyy = instDate.getFullYear();
+          const mm = String(instDate.getMonth() + 1).padStart(2, "0");
+          const dd = String(instDate.getDate()).padStart(2, "0");
+          const formattedDate = `${yyyy}-${mm}-${dd}`;
+          const descText = rawDesc ? `${rawDesc} (${i}/${numInstallments})` : `${category} (${i}/${numInstallments})`;
 
           await add("transactions", {
             type: type,
-            date: instDateStr,
-            category: catVal,
-            paymentMethod: pmVal,
-            description: itemDesc,
-            amount: perInstallmentAmount
+            date: formattedDate,
+            category: category,
+            paymentMethod: "credit",
+            description: descText,
+            amount: installmentAmount
           });
-
-          m += 1;
-          if (m > 12) { m = 1; y += 1; }
         }
       } else {
         await add("transactions", {
           type: type,
           date: baseDateStr,
-          category: catVal,
-          paymentMethod: pmVal,
-          description: descVal,
+          category: category,
+          paymentMethod: paymentMethod,
+          description: rawDesc,
           amount: totalAmount
         });
       }
 
-      $("transactionDialog")?.close();
+      const dlg = $("transactionDialog");
+      if (dlg) dlg.close();
       txForm.reset();
       await refresh();
     };
@@ -142,12 +140,13 @@ function setupForms() {
     cardForm.onsubmit = async e => {
       e.preventDefault();
       await add("cards", {
-        name: $("cName")?.value.trim() || "Cartão",
-        limit: Number($("cLimit")?.value) || 0,
-        closing: Number($("cClosing")?.value) || 1,
-        due: Number($("cDue")?.value) || 10
+        name: $("cName").value.trim(),
+        limit: Number($("cLimit").value),
+        closing: Number($("cClosing").value),
+        due: Number($("cDue").value)
       });
-      $("cardDialog")?.close();
+      const dlg = $("cardDialog");
+      if (dlg) dlg.close();
       cardForm.reset();
       await renderCards();
     };
@@ -169,24 +168,39 @@ function openTransaction(type) {
     $("tCategory").innerHTML = (type === "expense" ? CATEGORIES : INCOME_CATEGORIES)
       .map(x => `<option value="${x}">${x}</option>`).join("");
   }
-
+  
   const pmGroup = $("paymentMethodGroup");
-  const instGroup = $("installmentsGroup");
   const pmElem = $("tPaymentMethod");
+  const instGroup = $("installmentsGroup");
+  const instElem = $("tInstallments");
 
-  if (type === "expense") {
-    if (pmGroup) pmGroup.style.display = "block";
-    if (pmElem) pmElem.value = "account";
-    if (instGroup) instGroup.style.display = "none";
-  } else {
-    if (pmGroup) pmGroup.style.display = "none";
-    if (instGroup) instGroup.style.display = "none";
+  if (pmGroup) {
+    if (type === "expense") {
+      pmGroup.style.display = "block";
+      if (pmElem) pmElem.value = "account";
+    } else {
+      pmGroup.style.display = "none";
+    }
   }
 
-  const dialog = $("transactionDialog");
-  if (dialog) {
-    if (typeof dialog.showModal === "function") dialog.showModal();
-    else dialog.setAttribute("open", "true");
+  if (instGroup) {
+    instGroup.style.display = "none";
+    if (instElem) instElem.value = "1";
+  }
+
+  if (pmElem) {
+    pmElem.onchange = () => {
+      if (instGroup) {
+        instGroup.style.display = (pmElem.value === "credit") ? "block" : "none";
+      }
+    };
+  }
+
+  const dlg = $("transactionDialog");
+  if (dlg && typeof dlg.showModal === "function") {
+    dlg.showModal();
+  } else if (dlg) {
+    dlg.setAttribute("open", "");
   }
 }
 
@@ -201,6 +215,7 @@ async function renderDashboard() {
   const all = await getAll("transactions"), key = monthKey(currentDate), tx = all.filter(x => x.date && x.date.startsWith(key));
   const income = tx.filter(x => x.type === "income").reduce((a, x) => a + x.amount, 0);
   const expense = tx.filter(x => x.type === "expense").reduce((a, x) => a + x.amount, 0);
+  
   const accountExpense = tx.filter(x => x.type === "expense" && x.paymentMethod !== "credit").reduce((a, x) => a + x.amount, 0);
   const balance = income - accountExpense;
 
@@ -215,9 +230,9 @@ async function renderDashboard() {
   cashflowChart?.destroy();
   categoryChart?.destroy();
 
-  const c1 = $("cashflowChart");
-  if (c1) {
-    cashflowChart = new Chart(c1, {
+  const cfElem = $("cashflowChart");
+  if (cfElem) {
+    cashflowChart = new Chart(cfElem, {
       type: "bar",
       data: {
         labels: ["Receitas", "Despesas Totais", "Despesas Conta"],
@@ -226,19 +241,28 @@ async function renderDashboard() {
           backgroundColor: ["#18794e", "#a33b3b", "#2b6cb0"]
         }]
       },
-      options: { plugins: { legend: { display: false } }, responsive: true, maintainAspectRatio: false }
+      options: {
+        plugins: { legend: { display: false } },
+        responsive: true,
+        maintainAspectRatio: false
+      }
     });
   }
 
-  const c2 = $("categoryChart");
-  if (c2) {
-    categoryChart = new Chart(c2, {
+  const catElem = $("categoryChart");
+  if (catElem) {
+    categoryChart = new Chart(catElem, {
       type: "doughnut",
       data: {
         labels: Object.keys(byCat).length ? Object.keys(byCat) : ["Sem despesas"],
-        datasets: [{ data: Object.values(byCat).length ? Object.values(byCat) : [1] }]
+        datasets: [{
+          data: Object.values(byCat).length ? Object.values(byCat) : [1]
+        }]
       },
-      options: { plugins: { legend: { position: "bottom" } }, responsive: true }
+      options: {
+        plugins: { legend: { position: "bottom" } },
+        responsive: true
+      }
     });
   }
 
@@ -255,7 +279,7 @@ async function renderDashboard() {
 
 async function renderTransactions() {
   const all = await getAll("transactions"), key = monthKey(currentDate);
-  const filter = $("typeFilter")?.value || "all";
+  const filter = $("typeFilter") ? $("typeFilter").value : "all";
   let tx = all.filter(x => x.date && x.date.startsWith(key) && (filter === "all" || x.type === filter)).sort((a, b) => b.date.localeCompare(a.date));
   
   if ($("transactionsTable")) {
@@ -324,51 +348,89 @@ async function exportBackup() {
 
 function importBackup(e) {
   const files = e.target.files;
-  if (!files || !files.length) return;
+  if (!files || files.length === 0) return;
   const file = files[0];
-  const r = new FileReader();
-  r.onload = async () => {
+
+  const reader = new FileReader();
+  reader.onload = async event => {
     try {
-      const d = JSON.parse(r.result);
-      const txs = Array.isArray(d.transactions) ? d.transactions : (Array.isArray(d) ? d : []);
-      const crds = Array.isArray(d.cards) ? d.cards : [];
+      const rawText = event.target.result;
+      if (!rawText || !rawText.trim()) {
+        throw new Error("Arquivo vazio");
+      }
+      
+      const parsed = JSON.parse(rawText);
 
-      const txStore = store("transactions", "readwrite");
-      const cardStore = store("cards", "readwrite");
+      let txList = [];
+      let cardList = [];
 
-      (await getAll("transactions")).forEach(x => txStore.delete(x.id));
-      (await getAll("cards")).forEach(x => cardStore.delete(x.id));
+      if (Array.isArray(parsed)) {
+        txList = parsed;
+      } else if (typeof parsed === "object" && parsed !== null) {
+        if (Array.isArray(parsed.transactions)) txList = parsed.transactions;
+        if (Array.isArray(parsed.cards)) cardList = parsed.cards;
+        // Also support fallback if user uploaded data under 'data' or similar
+        if (txList.length === 0 && Array.isArray(parsed.data)) txList = parsed.data;
+      }
 
-      txs.forEach(x => { delete x.id; txStore.add(x); });
-      crds.forEach(x => { delete x.id; cardStore.add(x); });
+      if (!Array.isArray(txList)) {
+        throw new Error("Estrutura do backup não contém lançamentos válidos.");
+      }
 
-      txStore.transaction.oncomplete = async () => {
+      // Execute atomic multi-store IndexedDB clear + populate transaction
+      const idbTx = db.transaction(["transactions", "cards"], "readwrite");
+      const txStore = idbTx.objectStore("transactions");
+      const cardStore = idbTx.objectStore("cards");
+
+      txStore.clear();
+      cardStore.clear();
+
+      txList.forEach(item => {
+        if (item && typeof item === "object") {
+          const record = { ...item };
+          delete record.id; // allow IndexedDB autoIncrement
+          txStore.add(record);
+        }
+      });
+
+      cardList.forEach(item => {
+        if (item && typeof item === "object") {
+          const record = { ...item };
+          delete record.id;
+          cardStore.add(record);
+        }
+      });
+
+      idbTx.oncomplete = async () => {
         alert("Backup restaurado com sucesso!");
+        e.target.value = "";
         await refresh();
       };
+
+      idbTx.onerror = err => {
+        console.error("Erro na transação de restauração:", err);
+        alert("Erro ao gravar dados no navegador.");
+        e.target.value = "";
+      };
+
     } catch (err) {
-      console.error(err);
-      alert("Arquivo de backup inválido.");
+      console.error("Erro ao importar backup:", err);
+      alert("Arquivo de backup inválido: " + err.message);
+      e.target.value = "";
     }
   };
-  r.readAsText(file);
-  e.target.value = "";
+
+  reader.onerror = () => {
+    alert("Erro ao ler o arquivo selecionado.");
+    e.target.value = "";
+  };
+
+  reader.readAsText(file);
 }
 
-window.openTransaction = openTransaction;
-
-document.addEventListener("DOMContentLoaded", async () => {
+(async () => {
   setupNav();
   setupForms();
   await openDB();
   await refresh();
-});
-
-if (document.readyState === "complete" || document.readyState === "interactive") {
-  setTimeout(async () => {
-    setupNav();
-    setupForms();
-    await openDB();
-    await refresh();
-  }, 100);
-}
+})();
