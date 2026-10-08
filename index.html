@@ -129,7 +129,7 @@
         <p>Os lançamentos e cartões ficam armazenados localmente neste navegador. Exporte um backup regularmente para não depender apenas do armazenamento local.</p>
         <div class="backup-actions">
           <button class="primary" id="exportBackup">Exportar backup JSON</button>
-          <label class="secondary file-btn">Importar backup JSON<input type="file" id="importBackup" accept=".json"></label>
+          <label class="secondary file-btn">Importar backup JSON<input type="file" id="importBackup" accept=".json,application/json"></label>
         </div>
         <div class="notice">O backup contém somente os dados do aplicativo. Ele não é enviado automaticamente ao GitHub.</div>
       </article>
@@ -215,9 +215,9 @@
     if ('serviceWorker' in navigator) {
       window.addEventListener('load', () => {
         navigator.serviceWorker.register('./sw.js').then(reg => {
-          console.log('Service Worker registrado com sucesso!');
+          console.log('Service Worker registrado.');
         }).catch(err => {
-          console.warn('Erro ao registrar Service Worker:', err);
+          console.warn('Erro Service Worker:', err);
         });
       });
     }
