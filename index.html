@@ -15,7 +15,7 @@
   <meta name="apple-mobile-web-app-title" content="Finanças">
   <link rel="apple-touch-icon" href="icon-192.png">
 
-  <link rel="stylesheet" href="style.css?v=2.0">
+  <link rel="stylesheet" href="style.css?v=2.1">
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 </head>
 <body>
@@ -35,7 +35,7 @@
         <span>Backup</span>
       </button>
     </nav>
-    <div class="sidebar-footer">V2.0 PWA · dados locais</div>
+    <div class="sidebar-footer">V2.1 PWA · dados locais</div>
   </aside>
 
   <main>
@@ -208,14 +208,14 @@
     </form>
   </dialog>
 
-  <script src="validation.js?v=2.0"></script>
-  <script src="db.js?v=2.0"></script>
-  <script src="app.js?v=2.0"></script>
+  <script src="validation.js?v=2.1"></script>
+  <script src="db.js?v=2.1"></script>
+  <script src="app.js?v=2.1"></script>
   <script>
     if ('serviceWorker' in navigator) {
       window.addEventListener('load', () => {
-        navigator.serviceWorker.register('./sw.js?v=2.0').then(reg => {
-          console.log('Service Worker v2.0 registrado.');
+        navigator.serviceWorker.register('./sw.js?v=2.1').then(reg => {
+          console.log('Service Worker v2.1 registrado.');
         });
       });
     }
