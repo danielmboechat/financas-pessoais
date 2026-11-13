@@ -236,33 +236,124 @@ async function exportBackup() {
 }
 
 function importBackup(e) {
-  const file = e.target.files[0];
+  const input = e.target;
+  const file = input.files && input.files[0];
   if (!file) return;
-  const r = new FileReader();
-  r.onload = async () => {
+
+  const reader = new FileReader();
+
+  reader.onload = async () => {
+    let backup;
+
+    // Primeiro conferimos o arquivo. Os dados atuais só serão tocados depois disso.
     try {
-      const d = JSON.parse(r.result);
-      if (!Array.isArray(d.transactions) || !Array.isArray(d.cards)) throw Error("Formato inválido");
-      
-      const txStore = store("transactions", "readwrite");
-      const cardStore = store("cards", "readwrite");
-      
-      (await getAll("transactions")).forEach(x => txStore.delete(x.id));
-      (await getAll("cards")).forEach(x => cardStore.delete(x.id));
-      
-      d.transactions.forEach(x => { delete x.id; txStore.add(x); });
-      d.cards.forEach(x => { delete x.id; cardStore.add(x); });
-      
-      txStore.transaction.oncomplete = async () => {
+      backup = JSON.parse(reader.result);
+    } catch (err) {
+      alert("Não foi possível ler o backup. O arquivo não parece ser um JSON válido.");
+      return;
+    }
+
+    const validation = typeof validateBackupPayload === "function"
+      ? validateBackupPayload(backup)
+      : {
+          ok: !!backup &&
+            typeof backup === "object" &&
+            Array.isArray(backup.transactions) &&
+            Array.isArray(backup.cards),
+          error: "O arquivo não contém um backup válido."
+        };
+
+    if (!validation.ok) {
+      alert(validation.error || "Arquivo de backup inválido.");
+      return;
+    }
+
+    // Evita que um arquivo malformado apague os dados atuais.
+    const validRecords = records =>
+      records.every(record =>
+        record !== null &&
+        typeof record === "object" &&
+        !Array.isArray(record)
+      );
+
+    if (!validRecords(backup.transactions) || !validRecords(backup.cards)) {
+      alert("O backup contém registros inválidos. Nenhum dado atual foi alterado.");
+      return;
+    }
+
+    // Mantém IDs válidos do backup; registros sem ID recebem um novo ID automaticamente.
+    const prepareRecord = record => {
+      const copy = { ...record };
+      if (!Number.isInteger(copy.id) || copy.id <= 0) {
+        delete copy.id;
+      }
+      return copy;
+    };
+
+    let transaction;
+    let finished = false;
+
+    const reportFailure = message => {
+      if (finished) return;
+      finished = true;
+      alert(
+        "Não foi possível restaurar o backup. Seus dados anteriores foram preservados. " +
+        (message || "Tente novamente com outro arquivo.")
+      );
+    };
+
+    try {
+      // Uma única operação para as duas listas: ou tudo é restaurado, ou nada é alterado.
+      transaction = db.transaction(["transactions", "cards"], "readwrite");
+
+      transaction.oncomplete = async () => {
+        if (finished) return;
+        finished = true;
         alert("Backup restaurado com sucesso!");
         await refresh();
       };
+
+      transaction.onerror = () => {
+        reportFailure(transaction.error?.message);
+      };
+
+      transaction.onabort = () => {
+        reportFailure(transaction.error?.message);
+      };
+
+      const txStore = transaction.objectStore("transactions");
+      const cardStore = transaction.objectStore("cards");
+
+      // Não usar await entre estas operações: o navegador precisa concluir a transação
+      // enquanto ela ainda está ativa.
+      txStore.clear();
+      cardStore.clear();
+
+      backup.transactions.forEach(record => {
+        txStore.add(prepareRecord(record));
+      });
+
+      backup.cards.forEach(record => {
+        cardStore.add(prepareRecord(record));
+      });
     } catch (err) {
-      alert("Arquivo de backup inválido: " + err.message);
+      if (transaction) {
+        try {
+          transaction.abort();
+        } catch (_) {
+          // A transação pode já ter sido encerrada pelo navegador.
+        }
+      }
+      reportFailure(err.message);
     }
   };
-  r.readAsText(file);
-  e.target.value = "";
+
+  reader.onerror = () => {
+    alert("O arquivo não pôde ser lido. Tente selecioná-lo novamente.");
+  };
+
+  reader.readAsText(file);
+  input.value = "";
 }
 
 // Global initialization
