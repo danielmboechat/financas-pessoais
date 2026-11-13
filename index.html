@@ -35,7 +35,7 @@
         <span>Backup</span>
       </button>
     </nav>
-    <div class="sidebar-footer">V1.5 PWA · dados locais</div>
+    <div class="sidebar-footer">V2.0 PWA · dados locais</div>
   </aside>
 
   <main>
@@ -143,7 +143,7 @@
           <button class="primary" id="exportBackup">Exportar backup JSON</button>
           <label class="secondary file-btn" for="importBackup">
             <span>Importar backup JSON</span>
-            <input type="file" id="importBackup" accept=".json,application/json">
+            <input type="file" id="importBackup" accept=".json,.txt,application/json,text/plain">
           </label>
         </div>
         <div class="notice">O backup contém somente os dados do aplicativo. Ele não é enviado automaticamente ao GitHub.</div>
@@ -208,12 +208,12 @@
     </form>
   </dialog>
 
-<script type="module" src="app.js?v=2.0"></script>
+  <script type="module" src="app.js?v=2.0"></script>
   <script>
     if ('serviceWorker' in navigator) {
       window.addEventListener('load', () => {
-        navigator.serviceWorker.register('./sw.js?v=1.5').then(reg => {
-          console.log('Service Worker v1.5 registrado.');
+        navigator.serviceWorker.register('./sw.js?v=2.0').then(reg => {
+          console.log('Service Worker v2.0 registrado.');
         });
       });
     }
