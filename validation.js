@@ -1,3 +1,15 @@
+export const EXPENSE_CATEGORIES = [
+  "Alimentação",
+  "Saúde",
+  "Lazer",
+  "Compras",
+  "Assinaturas",
+  "Educação",
+  "Viagens",
+  "Outros"
+];
+
+export const INCOME_CATEGORIES = ["salário", "outros recebimentos"];
 export const VALID_TRANSACTION_TYPES = ["income", "expense"];
 export const VALID_PAYMENT_METHODS = ["account", "credit"];
 
@@ -13,93 +25,153 @@ export function monthKey(date) {
 }
 
 export function monthName(date) {
-  return date.toLocaleDateString("pt-BR", { month: "long", year: "numeric" })
-    .replace(/^./, x => x.toUpperCase());
+  return date
+    .toLocaleDateString("pt-BR", { month: "long", year: "numeric" })
+    .replace(/^./, character => character.toUpperCase());
 }
 
 export function dateBR(value) {
   if (!value) return "—";
+
   const parsed = new Date(`${value}T12:00:00`);
-  if (Number.isNaN(parsed.getTime())) return value;
-  return parsed.toLocaleDateString("pt-BR");
+  return Number.isNaN(parsed.getTime())
+    ? String(value)
+    : parsed.toLocaleDateString("pt-BR");
 }
 
-function toNumber(value) {
-  const numeric = Number(value);
-  return Number.isFinite(numeric) ? numeric : null;
+function numberValue(value) {
+  if (value === "" || value === null || value === undefined) return null;
+  const number = Number(value);
+  return Number.isFinite(number) ? number : null;
 }
 
-export function normalizeTransactionInput(input) {
-  const type = String(input?.type || "").trim();
+function isValidDate(value) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
+
+  const date = new Date(`${value}T12:00:00`);
+  return !Number.isNaN(date.getTime()) &&
+    date.toISOString().slice(0, 10) === value;
+}
+
+function normalizeId(value, label) {
+  if (value === undefined) return { ok: true, id: undefined };
+
+  const id = Number(value);
+  if (!Number.isInteger(id) || id <= 0) {
+    return { ok: false, error: `Identificador inválido: ${label}.` };
+  }
+
+  return { ok: true, id };
+}
+
+/**
+ * Set requireCardForCredit to true for a new credit-card transaction.
+ * It remains false by default so older backups with unassigned card purchases
+ * can still be imported.
+ */
+export function normalizeTransactionInput(input, { requireCardForCredit = false } = {}) {
+  if (!input || typeof input !== "object") {
+    return { ok: false, error: "Lançamento inválido." };
+  }
+
+  const type = String(input.type || "").trim();
   if (!VALID_TRANSACTION_TYPES.includes(type)) {
     return { ok: false, error: "Tipo de lançamento inválido." };
   }
 
-  const date = String(input?.date || "").trim();
-  if (!date || Number.isNaN(new Date(`${date}T12:00:00`).getTime())) {
+  const date = String(input.date || "").trim();
+  if (!isValidDate(date)) {
     return { ok: false, error: "Selecione uma data válida." };
   }
 
-  const category = String(input?.category || "").trim();
-  if (!category) {
-    return { ok: false, error: "Selecione uma categoria." };
+  const category = String(input.category || "").trim();
+  const validCategories = type === "expense" ? EXPENSE_CATEGORIES : INCOME_CATEGORIES;
+  if (!validCategories.includes(category)) {
+    return { ok: false, error: "Selecione uma categoria válida." };
   }
 
-  const amount = toNumber(input?.amount);
+  const amount = numberValue(input.amount);
   if (amount === null || amount <= 0) {
     return { ok: false, error: "Informe um valor maior que zero." };
   }
 
-  const paymentMethod = VALID_PAYMENT_METHODS.includes(input?.paymentMethod) ? input.paymentMethod : "account";
-  const cardId = input?.cardId !== undefined && input?.cardId !== null && input?.cardId !== ""
-    ? Number(input.cardId)
-    : null;
+  const paymentMethod = type === "expense"
+    ? String(input.paymentMethod || "account")
+    : "account";
 
-  if (type === "expense" && paymentMethod === "credit" && (!Number.isInteger(cardId) || cardId <= 0)) {
-    return { ok: false, error: "Selecione um cartão para o pagamento com cartão de crédito." };
+  if (!VALID_PAYMENT_METHODS.includes(paymentMethod)) {
+    return { ok: false, error: "Forma de pagamento inválida." };
   }
 
-  const description = String(input?.description || "").trim().slice(0, 100) || "Sem descrição";
+  let cardId;
+  if (input.cardId !== undefined && input.cardId !== null && input.cardId !== "") {
+    const parsedCardId = Number(input.cardId);
+    if (!Number.isInteger(parsedCardId) || parsedCardId <= 0) {
+      return { ok: false, error: "Cartão inválido." };
+    }
+    cardId = parsedCardId;
+  }
+
+  if (type === "expense" && paymentMethod === "credit" &&
+      requireCardForCredit && cardId === undefined) {
+    return { ok: false, error: "Selecione um cartão para esta despesa." };
+  }
+
+  if (type !== "expense" || paymentMethod !== "credit") {
+    cardId = undefined;
+  }
+
+  const idResult = normalizeId(input.id, "lançamento");
+  if (!idResult.ok) return idResult;
 
   return {
     ok: true,
     data: {
+      ...(idResult.id !== undefined ? { id: idResult.id } : {}),
       type,
       date,
       category,
       paymentMethod,
-      description,
+      description: String(input.description || "").trim().slice(0, 100),
       amount: Number(amount.toFixed(2)),
-      ...(cardId !== null ? { cardId } : {})
+      ...(cardId !== undefined ? { cardId } : {})
     }
   };
 }
 
 export function normalizeCardInput(input) {
-  const name = String(input?.name || "").trim();
+  if (!input || typeof input !== "object") {
+    return { ok: false, error: "Cartão inválido." };
+  }
+
+  const name = String(input.name || "").trim();
   if (!name) {
     return { ok: false, error: "Informe o nome do cartão." };
   }
 
-  const limit = toNumber(input?.limit);
+  const limit = numberValue(input.limit);
   if (limit === null || limit < 0) {
     return { ok: false, error: "O limite deve ser maior ou igual a zero." };
   }
 
-  const closing = Number(input?.closing);
-  const due = Number(input?.due);
+  const closing = Number(input.closing);
+  const due = Number(input.due);
 
   if (!Number.isInteger(closing) || closing < 1 || closing > 31) {
-    return { ok: false, error: "O dia de fechamento deve estar entre 1 e 31." };
+    return { ok: false, error: "O fechamento deve estar entre os dias 1 e 31." };
   }
 
   if (!Number.isInteger(due) || due < 1 || due > 31) {
-    return { ok: false, error: "O dia de vencimento deve estar entre 1 e 31." };
+    return { ok: false, error: "O vencimento deve estar entre os dias 1 e 31." };
   }
+
+  const idResult = normalizeId(input.id, "cartão");
+  if (!idResult.ok) return idResult;
 
   return {
     ok: true,
     data: {
+      ...(idResult.id !== undefined ? { id: idResult.id } : {}),
       name,
       limit: Number(limit.toFixed(2)),
       closing,
@@ -109,35 +181,60 @@ export function normalizeCardInput(input) {
 }
 
 export function validateBackupPayload(payload) {
-  if (!payload || typeof payload !== "object") {
+  if (!payload || typeof payload !== "object" || Array.isArray(payload)) {
     return { ok: false, error: "Arquivo de backup inválido." };
   }
 
-  if (!Array.isArray(payload.transactions) || !Array.isArray(payload.cards)) {
-    return { ok: false, error: "Arquivo de backup inválido: estrutura inesperada." };
+  if (payload.version !== undefined && payload.version !== 1) {
+    return { ok: false, error: "A versão deste backup não é compatível." };
   }
 
-  const normalizedTransactions = payload.transactions.map(transaction => {
-    const normalized = normalizeTransactionInput(transaction);
-    if (!normalized.ok) {
-      throw new Error(normalized.error);
-    }
-    return normalized.data;
-  });
+  if (!Array.isArray(payload.transactions) || !Array.isArray(payload.cards)) {
+    return { ok: false, error: "O backup não contém listas válidas de lançamentos e cartões." };
+  }
 
-  const normalizedCards = payload.cards.map(card => {
-    const normalized = normalizeCardInput(card);
-    if (!normalized.ok) {
-      throw new Error(normalized.error);
+  const transactions = [];
+  const cards = [];
+
+  for (const transaction of payload.transactions) {
+    const result = normalizeTransactionInput(transaction);
+    if (!result.ok) return result;
+    transactions.push(result.data);
+  }
+
+  for (const card of payload.cards) {
+    const result = normalizeCardInput(card);
+    if (!result.ok) return result;
+    cards.push(result.data);
+  }
+
+  const cardIds = cards
+    .map(card => card.id)
+    .filter(id => id !== undefined);
+
+  if (new Set(cardIds).size !== cardIds.length) {
+    return { ok: false, error: "O backup contém cartões duplicados." };
+  }
+
+  const transactionIds = transactions
+    .map(transaction => transaction.id)
+    .filter(id => id !== undefined);
+
+  if (new Set(transactionIds).size !== transactionIds.length) {
+    return { ok: false, error: "O backup contém lançamentos duplicados." };
+  }
+
+  const knownCardIds = new Set(cardIds);
+  for (const transaction of transactions) {
+    if (transaction.cardId !== undefined &&
+        cardIds.length > 0 &&
+        !knownCardIds.has(transaction.cardId)) {
+      return { ok: false, error: "Há lançamentos associados a cartões inexistentes no backup." };
     }
-    return normalized.data;
-  });
+  }
 
   return {
     ok: true,
-    data: {
-      transactions: normalizedTransactions,
-      cards: normalizedCards
-    }
+    data: { transactions, cards }
   };
 }
