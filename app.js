@@ -1,7 +1,7 @@
-const CATEGORIES = ["Alimentação", "Saúde", "Lazer", "Compras", "Assinaturas", "Educação", "Viagens", "Outros", "Fatura Cartão"];
+const CATEGORIES = ["Alimentação", "Saúde", "Lazer", "Compras", "Assinaturas", "Educação", "Viagens", "Fatura Cartão", "Outros"];
 const INCOME_CATEGORIES = ["salário", "outros recebimentos"];
 const DB_NAME = "financeiro_pessoal_v1", DB_VERSION = 1;
-let db, currentDate = new Date(), cashflowChart, categoryChart;
+let db, currentDate = new Date(2026, 10, 1), cashflowChart, categoryChart;
 
 const $ = id => document.getElementById(id);
 const money = v => new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(Number(v) || 0);
@@ -124,34 +124,33 @@ async function refresh() {
 }
 
 async function renderDashboard() {
-  const all = await getAll("transactions");
-  const key = monthKey(currentDate);
-
-  // Lançamentos do mês selecionado
-  const txMonth = all.filter(x => x.date.startsWith(key));
+  const all = await getAll("transactions"), key = monthKey(currentDate), tx = all.filter(x => x.date.startsWith(key));
+  const income = tx.filter(x => x.type === "income").reduce((a, x) => a + x.amount, 0);
   
-  // Receitas do mês
-  const income = txMonth.filter(x => x.type === "income").reduce((a, x) => a + x.amount, 0);
+  // Account expenses: Pix / Débito / Fatura Cartão Paga da conta no mês
+  const accountExpense = tx.filter(x => x.type === "expense" && x.paymentMethod !== "credit").reduce((a, x) => a + x.amount, 0);
   
-  // Despesas do mês (sem duplicar o pagamento de Fatura Cartão se houver compras no crédito)
-  const expense = txMonth
-    .filter(x => x.type === "expense" && x.category !== "Fatura Cartão")
-    .reduce((a, x) => a + x.amount, 0);
-
-  // Saldo real acumulado em conta bancária (Entradas Conta - Saídas Conta)
-  const allAccount = all.filter(x => x.paymentMethod === "account");
-  const accountIn = allAccount.filter(x => x.type === "income").reduce((a, x) => a + x.amount, 0);
-  const accountOut = allAccount.filter(x => x.type === "expense").reduce((a, x) => a + x.amount, 0);
-  const bankBalance = accountIn - accountOut;
+  // Credit card purchases in this month (accumulating for next month's bill)
+  const creditExpense = tx.filter(x => x.type === "expense" && x.paymentMethod === "credit").reduce((a, x) => a + x.amount, 0);
+  
+  // Real cashflow result for this month (Entradas da conta − Saídas da conta)
+  const netCashflow = income - accountExpense;
 
   $("mReceitas").textContent = money(income);
-  $("mDespesas").textContent = money(expense);
-  $("mSaldo").textContent = money(bankBalance);
-  $("mLancamentos").textContent = txMonth.length;
+  $("mDespesas").textContent = money(accountExpense);
+  $("mSaldo").textContent = money(netCashflow);
+  
+  const cardElem = $("mCartao") || $("mLancamentos");
+  if ($("mCartao")) {
+    $("mCartao").textContent = money(creditExpense);
+  } else if ($("mLancamentos")) {
+    $("mLancamentos").textContent = money(creditExpense);
+    const parentSpan = $("mLancamentos").previousElementSibling;
+    if (parentSpan) parentSpan.textContent = "Cartão (Fatura Mês)";
+  }
 
   const byCat = {};
-  txMonth.filter(x => x.type === "expense" && x.category !== "Fatura Cartão")
-    .forEach(x => byCat[x.category] = (byCat[x.category] || 0) + x.amount);
+  tx.filter(x => x.type === "expense").forEach(x => byCat[x.category] = (byCat[x.category] || 0) + x.amount);
 
   cashflowChart?.destroy();
   categoryChart?.destroy();
@@ -159,10 +158,10 @@ async function renderDashboard() {
   cashflowChart = new Chart($("cashflowChart"), {
     type: "bar",
     data: {
-      labels: ["Receitas do Mês", "Despesas do Mês"],
+      labels: ["Receitas (Conta)", "Saídas (Conta)", "Resultado Caixa", "Cartão (A Vencer)"],
       datasets: [{
-        data: [income, expense],
-        backgroundColor: ["#10b981", "#ef4444"]
+        data: [income, accountExpense, netCashflow, creditExpense],
+        backgroundColor: ["#10b981", "#ef4444", "#38bdf8", "#f59e0b"]
       }]
     },
     options: {
@@ -186,11 +185,11 @@ async function renderDashboard() {
     }
   });
 
-  const recent = [...txMonth].sort((a, b) => b.date.localeCompare(a.date)).slice(0, 6);
+  const recent = [...tx].sort((a, b) => b.date.localeCompare(a.date)).slice(0, 8);
   $("recentList").innerHTML = recent.length ? recent.map(x => `
     <div class="list-row">
       <span class="muted">${dateBR(x.date)}</span>
-      <span>${x.description || x.category} ${x.paymentMethod === 'credit' ? '<small class="tag">Cartão</small>' : ''}</span>
+      <span>${x.description || x.category} ${x.paymentMethod === 'credit' ? '<small class="tag" style="background:#f59e0b;color:#000;">Cartão</small>' : ''}</span>
       <strong class="${x.type}">${x.type === "income" ? "+" : "−"} ${money(x.amount)}</strong>
     </div>`).join("") : `<div class="muted">Nenhum lançamento neste mês.</div>`;
 }
@@ -204,7 +203,7 @@ async function renderTransactions() {
       <td>${dateBR(x.date)}</td>
       <td><span class="tag">${x.type === "income" ? "Receita" : "Despesa"}</span></td>
       <td>${x.category}</td>
-      <td>${x.description || "—"} ${x.paymentMethod === "credit" ? '<span class="tag" style="background:#334155;color:#fff;">Cartão</span>' : ''}</td>
+      <td>${x.description || "—"} ${x.paymentMethod === "credit" ? '<span class="tag" style="background:#f59e0b;color:#000;">Cartão</span>' : ''}</td>
       <td class="${x.type}">${x.type === "income" ? "+" : "−"} ${money(x.amount)}</td>
       <td><button class="delete" data-delete="${x.id}">Excluir</button></td>
     </tr>`).join("") : `<tr><td colspan="6" class="muted">Nenhum lançamento.</td></tr>`;
@@ -260,33 +259,30 @@ async function exportBackup() {
 }
 
 function importBackup(e) {
-  const files = e.target.files;
-  if (!files || !files.length) return;
-  const file = files[0];
+  const file = e.target.files ? e.target.files[0] : null;
+  if (!file) return;
   const r = new FileReader();
   r.onload = async () => {
     try {
       const d = JSON.parse(r.result);
-      const list = Array.isArray(d) ? d : (d.transactions || []);
-      const cardsList = (d.cards && Array.isArray(d.cards)) ? d.cards : [{ id: 1, name: "Nubank", limit: 8700, closing: 2, due: 9 }];
-
-      if (!Array.isArray(list)) throw Error("Formato de transações inválido.");
-
+      const txData = Array.isArray(d) ? d : (d.transactions || []);
+      const cardData = d.cards || [];
+      
       const txStore = store("transactions", "readwrite");
       const cardStore = store("cards", "readwrite");
-
+      
       txStore.clear();
       cardStore.clear();
-
-      list.forEach(x => { const item = { ...x }; delete item.id; txStore.add(item); });
-      cardsList.forEach(c => { const cardItem = { ...c }; delete cardItem.id; cardStore.add(cardItem); });
-
+      
+      txData.forEach(x => { delete x.id; txStore.add(x); });
+      cardData.forEach(x => { delete x.id; cardStore.add(x); });
+      
       txStore.transaction.oncomplete = async () => {
         alert("Backup restaurado com sucesso!");
         await refresh();
       };
     } catch (err) {
-      alert("Erro ao importar backup: " + (err.message || "Arquivo inválido"));
+      alert("Erro ao ler o arquivo de backup. Verifique se é um arquivo JSON válido.");
     }
   };
   r.readAsText(file);

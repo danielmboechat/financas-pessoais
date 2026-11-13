@@ -104,17 +104,18 @@ main {
   max-width: 1200px;
 }
 
-/* Topbar Sem Blur / Fundo Sólido para Leitura Clara e Navegação Fácil */
+/* Topbar Ajustada sem Blur e com Fundo Sólido */
 .topbar {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  background: var(--bg-main);
-  position: relative;
-  z-index: 50;
-  padding: calc(0.75rem + env(safe-area-inset-top)) 0 1.25rem 0;
+  background: #0f172a;
+  position: sticky;
+  top: 0;
+  z-index: 800;
+  padding: calc(1rem + env(safe-area-inset-top)) 1.5rem 1rem 1.5rem;
   border-bottom: 1px solid var(--border-color);
-  margin-bottom: 1.5rem;
+  margin: -1.5rem -2rem 1.5rem -2rem;
 }
 
 .eyebrow {
@@ -134,26 +135,25 @@ h1 {
   align-items: center;
   gap: 8px;
   background: var(--bg-card);
-  padding: 4px 8px;
+  padding: 4px 10px;
   border-radius: 9999px;
   border: 1px solid var(--border-color);
 }
 
 .month-control button {
-  width: 38px;
-  height: 38px;
+  width: 36px;
+  height: 36px;
   display: flex;
   align-items: center;
   justify-content: center;
   border-radius: 50%;
-  border: 1px solid var(--border-color);
-  background: var(--secondary);
+  border: none;
+  background: var(--border-color);
   color: var(--text-main);
   font-size: 1.25rem;
   font-weight: bold;
   cursor: pointer;
   transition: background 0.2s;
-  touch-action: manipulation;
 }
 
 .month-control button:active {
@@ -163,7 +163,7 @@ h1 {
 
 .month-control strong {
   font-size: 0.9rem;
-  min-width: 110px;
+  min-width: 120px;
   text-align: center;
   text-transform: capitalize;
 }
@@ -439,6 +439,7 @@ dialog {
 
 dialog::backdrop {
   background: rgba(0, 0, 0, 0.7);
+  backdrop-filter: blur(4px);
 }
 
 .dialog-head {
@@ -492,6 +493,7 @@ form input:focus, form select:focus {
 
 /* 📱 RESPONSIVIDADE E BOTTOM NAVIGATION BAR (CELULAR) */
 @media (max-width: 768px) {
+  /* Transformar Sidebar em Barra Inferior (Bottom Nav Bar) */
   .sidebar {
     position: fixed;
     bottom: 0;
@@ -507,7 +509,7 @@ form input:focus, form select:focus {
     z-index: 1000;
     flex-direction: row;
     justify-content: space-around;
-    box-shadow: 0 -4px 20px rgba(0, 0, 0, 0.5);
+    box-shadow: 0 -4px 20px rgba(0, 0, 0, 0.4);
   }
 
   .sidebar .brand,
@@ -548,17 +550,17 @@ form input:focus, form select:focus {
     line-height: 1;
   }
 
+  /* Ajuste de Margem e Espaçamentos do Conteúdo */
   main {
     margin-left: 0 !important;
     padding: 0 1rem calc(90px + env(safe-area-inset-bottom)) 1rem !important;
   }
 
+  /* Topbar Fundo Sólido */
   .topbar {
-    position: relative;
     margin: 0 -1rem 1.25rem -1rem;
-    padding: calc(10px + env(safe-area-inset-top)) 1rem 10px 1rem;
-    background: #0f172a;
-    border-bottom: 1px solid var(--border-color);
+    padding: calc(12px + env(safe-area-inset-top)) 1rem 12px 1rem;
+    background: #0f172a !important;
   }
 
   .eyebrow {
@@ -566,7 +568,7 @@ form input:focus, form select:focus {
   }
 
   h1 {
-    font-size: 1.2rem;
+    font-size: 1.25rem;
   }
 
   .month-control {
@@ -575,16 +577,17 @@ form input:focus, form select:focus {
   }
 
   .month-control button {
-    width: 36px;
-    height: 36px;
+    width: 32px;
+    height: 32px;
     font-size: 1.1rem;
   }
 
   .month-control strong {
     font-size: 0.8rem;
-    min-width: 85px;
+    min-width: 90px;
   }
 
+  /* Métricas em 2 colunas no celular */
   .cards {
     grid-template-columns: repeat(2, 1fr) !important;
     gap: 0.75rem !important;
@@ -602,6 +605,7 @@ form input:focus, form select:focus {
     font-size: 1.1rem !important;
   }
 
+  /* Gráficos Empilhados no Celular */
   .grid-2 {
     grid-template-columns: 1fr !important;
     gap: 1rem !important;
