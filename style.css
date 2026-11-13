@@ -104,12 +104,14 @@ main {
   max-width: 1200px;
 }
 
-/* Topbar Ajustada sem Blur e com Fundo Sólido */
+/* Topbar Ajustada com iOS Safe Area */
 .topbar {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  background: #0f172a;
+  background: rgba(15, 23, 42, 0.92);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
   position: sticky;
   top: 0;
   z-index: 800;
@@ -183,7 +185,7 @@ h1 {
 }
 
 /* Botões Globais */
-button.primary {
+.primary {
   background-color: var(--primary);
   color: white;
   border: none;
@@ -195,11 +197,11 @@ button.primary {
   transition: background 0.2s;
 }
 
-button.primary:hover {
+.primary:hover {
   background-color: var(--primary-hover);
 }
 
-button.secondary {
+.secondary {
   background-color: var(--secondary);
   color: var(--text-main);
   border: 1px solid var(--border-color);
@@ -211,7 +213,7 @@ button.secondary {
   transition: background 0.2s;
 }
 
-button.secondary:hover {
+.secondary:hover {
   background-color: var(--secondary-hover);
 }
 
@@ -556,11 +558,10 @@ form input:focus, form select:focus {
     padding: 0 1rem calc(90px + env(safe-area-inset-bottom)) 1rem !important;
   }
 
-  /* Topbar Fundo Sólido */
+  /* Topbar Ajustada para Safe Area do iOS */
   .topbar {
     margin: 0 -1rem 1.25rem -1rem;
     padding: calc(12px + env(safe-area-inset-top)) 1rem 12px 1rem;
-    background: #0f172a !important;
   }
 
   .eyebrow {
@@ -615,3 +616,5 @@ form input:focus, form select:focus {
     flex-direction: column;
   }
 }
+
+.file-btn { display: inline-flex; align-items: center; justify-content: center; text-align: center; cursor: pointer; }
