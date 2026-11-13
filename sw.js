@@ -1,11 +1,11 @@
-const CACHE_NAME = 'financas-v2.0';
+const CACHE_NAME = 'financas-v2.1';
 const ASSETS_TO_CACHE = [
   './',
   './index.html',
-  './style.css?v=1.5',
-  './app.js?v=2.0',
-  './validation.js',
-  './db.js',
+  './style.css?v=2.1',
+  './app.js?v=2.1',
+  './validation.js?v=2.1',
+  './db.js?v=2.1',
   './manifest.json',
   './icon-192.png',
   './icon-512.png',
