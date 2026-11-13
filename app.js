@@ -1,580 +1,278 @@
-import {
-  addRecord,
-  getAll,
-  importBackupRecords,
-  openDB,
-  removeRecord
-} from "./db.js";
-
-import {
-  EXPENSE_CATEGORIES,
-  INCOME_CATEGORIES,
-  dateBR,
-  monthKey,
-  monthName,
-  normalizeCardInput,
-  normalizeTransactionInput,
-  toMoney,
-  validateBackupPayload
-} from "./validation.js";
-
-const state = {
-  db: null,
-  currentDate: new Date(),
-  transactions: [],
-  cards: [],
-  charts: {
-    cashflow: null,
-    categories: null
-  }
-};
+let currentDate = new Date(), cashflowChart, categoryChart;
 
 const $ = id => document.getElementById(id);
 
-function escapeHTML(value) {
-  return String(value ?? "").replace(/[&<>"']/g, character => ({
-    "&": "&amp;",
-    "<": "&lt;",
-    ">": "&gt;",
-    '"': "&quot;",
-    "'": "&#39;"
-  })[character]);
-}
-
-function localDateInputValue(date = new Date()) {
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, "0");
-  const day = String(date.getDate()).padStart(2, "0");
-  return `${year}-${month}-${day}`;
-}
-
-function showError(message) {
-  window.alert(message || "Ocorreu um erro. Tente novamente.");
-}
-
-function monthTransactions() {
-  const key = monthKey(state.currentDate);
-  return state.transactions.filter(transaction => transaction.date.startsWith(key));
-}
-
-function sum(items) {
-  return items.reduce((total, item) => total + Number(item.amount || 0), 0);
-}
-
-async function reloadData() {
-  const [transactions, cards] = await Promise.all([
-    getAll(state.db, "transactions"),
-    getAll(state.db, "cards")
-  ]);
-
-  state.transactions = transactions;
-  state.cards = cards;
-}
-
-async function refresh() {
-  try {
-    await reloadData();
-    $("currentMonth").textContent = monthName(state.currentDate);
-    renderDashboard();
-    renderTransactions();
-    renderCards();
-  } catch (error) {
-    console.error(error);
-    showError("Não foi possível carregar os dados locais.");
-  }
+function setupNav() {
+  document.querySelectorAll(".nav").forEach(b => b.onclick = () => showView(b.dataset.view));
+  document.querySelectorAll("[data-go]").forEach(b => b.onclick = () => showView(b.dataset.go));
+  document.querySelectorAll("[data-close]").forEach(b => b.onclick = () => b.closest("dialog").close());
 }
 
 function showView(id) {
-  document.querySelectorAll(".view").forEach(view => {
-    view.classList.toggle("active-view", view.id === id);
-  });
-
-  document.querySelectorAll(".nav").forEach(button => {
-    button.classList.toggle("active", button.dataset.view === id);
-  });
-
-  const titles = {
-    dashboard: "Dashboard",
-    lancamentos: "Lançamentos",
-    cartoes: "Cartões",
-    backup: "Backup"
-  };
-
-  $("pageTitle").textContent = titles[id] || "Dashboard";
-}
-
-function setupNavigation() {
-  document.querySelectorAll(".nav").forEach(button => {
-    button.addEventListener("click", () => showView(button.dataset.view));
-  });
-
-  document.querySelectorAll("[data-go]").forEach(button => {
-    button.addEventListener("click", () => showView(button.dataset.go));
-  });
-
-  document.querySelectorAll("[data-action]").forEach(button => {
-    button.addEventListener("click", () => {
-      openTransaction(button.dataset.action === "newIncome" ? "income" : "expense");
-    });
-  });
-
-  document.querySelectorAll("[data-close]").forEach(button => {
-    button.addEventListener("click", () => button.closest("dialog")?.close());
-  });
-}
-
-function ensureCardPicker() {
-  const paymentMethod = $("tPaymentMethod");
-  if (!paymentMethod || $("tCard")) return;
-
-  const cardLabel = document.createElement("label");
-  cardLabel.id = "tCardField";
-  cardLabel.hidden = true;
-  cardLabel.append("Cartão de crédito");
-
-  const select = document.createElement("select");
-  select.id = "tCard";
-  select.innerHTML = '<option value="">Selecione um cartão</option>';
-  cardLabel.append(select);
-
-  paymentMethod.closest("label").after(cardLabel);
-
-  paymentMethod.addEventListener("change", updatePaymentFields);
-  select.addEventListener("change", () => select.setCustomValidity(""));
-}
-
-function updatePaymentFields() {
-  const paymentMethod = $("tPaymentMethod");
-  const paymentLabel = paymentMethod?.closest("label");
-  const cardField = $("tCardField");
-  const isExpense = $("transactionType").value === "expense";
-  const isCredit = isExpense && paymentMethod.value === "credit";
-
-  if (paymentLabel) paymentLabel.hidden = !isExpense;
-  if (cardField) cardField.hidden = !isCredit;
-}
-
-function populateCardPicker() {
-  const select = $("tCard");
-  if (!select) return;
-
-  select.innerHTML = [
-    '<option value="">Selecione um cartão</option>',
-    ...state.cards.map(card =>
-      `<option value="${Number(card.id)}">${escapeHTML(card.name)}</option>`
-    )
-  ].join("");
-}
-
-function openTransaction(type) {
-  ensureCardPicker();
-  populateCardPicker();
-
-  $("transactionTitle").textContent = type === "expense" ? "Nova despesa" : "Nova receita";
-  $("transactionType").value = type;
-  $("tDate").value = localDateInputValue();
-  $("tDescription").value = "";
-  $("tAmount").value = "";
-  $("tPaymentMethod").value = "account";
-  $("tCard").value = "";
-
-  const categories = type === "expense" ? EXPENSE_CATEGORIES : INCOME_CATEGORIES;
-  $("tCategory").innerHTML = categories
-    .map(category => `<option value="${escapeHTML(category)}">${escapeHTML(category)}</option>`)
-    .join("");
-
-  updatePaymentFields();
-  $("transactionDialog").showModal();
+  document.querySelectorAll(".view").forEach(v => v.classList.remove("active-view"));
+  const target = $(id);
+  if (target) target.classList.add("active-view");
+  document.querySelectorAll(".nav").forEach(b => b.classList.toggle("active", b.dataset.view === id));
+  const titleElem = $("pageTitle");
+  if (titleElem) {
+    titleElem.textContent = { dashboard: "Dashboard", lancamentos: "Lançamentos", cartoes: "Cartões", backup: "Backup" }[id] || "Dashboard";
+  }
+  if (id === "dashboard") renderDashboard();
+  if (id === "lancamentos") renderTransactions();
+  if (id === "cartoes") renderCards();
 }
 
 function setupForms() {
-  ensureCardPicker();
+  if ($("newExpense")) $("newExpense").onclick = () => openTransaction("expense");
+  if ($("newIncome")) $("newIncome").onclick = () => openTransaction("income");
+  if ($("newCard")) $("newCard").onclick = () => $("cardDialog").showModal();
 
-  $("newExpense").addEventListener("click", () => openTransaction("expense"));
-  $("newIncome").addEventListener("click", () => openTransaction("income"));
+  document.querySelectorAll("[data-action='newExpense']").forEach(b => b.onclick = () => openTransaction("expense"));
+  document.querySelectorAll("[data-action='newIncome']").forEach(b => b.onclick = () => openTransaction("income"));
 
-  $("newCard")?.addEventListener("click", () => $("cardDialog").showModal());
+  const tForm = $("transactionForm");
+  if (tForm) {
+    tForm.onsubmit = async e => {
+      e.preventDefault();
+      const type = $("transactionType").value;
+      const pmElem = $("tPaymentMethod");
+      const paymentMethod = (type === "expense" && pmElem) ? pmElem.value : "account";
 
-  $("transactionForm").addEventListener("submit", async event => {
-    event.preventDefault();
+      await add("transactions", {
+        type: type,
+        date: $("tDate").value,
+        category: $("tCategory").value,
+        paymentMethod: paymentMethod,
+        description: $("tDescription").value.trim(),
+        amount: Number($("tAmount").value)
+      });
 
-    const type = $("transactionType").value;
-    const paymentMethod = type === "expense" ? $("tPaymentMethod").value : "account";
-    const result = normalizeTransactionInput({
-      type,
-      date: $("tDate").value,
-      category: $("tCategory").value,
-      paymentMethod,
-      cardId: paymentMethod === "credit" ? $("tCard").value : undefined,
-      description: $("tDescription").value,
-      amount: $("tAmount").value
-    }, { requireCardForCredit: true });
-
-    if (!result.ok) {
-      showError(result.error);
-      return;
-    }
-
-    try {
-      await addRecord(state.db, "transactions", result.data);
       $("transactionDialog").close();
-      event.currentTarget.reset();
+      e.target.reset();
       await refresh();
-    } catch (error) {
-      console.error(error);
-      showError("Não foi possível salvar o lançamento.");
-    }
-  });
+    };
+  }
 
-  $("cardForm").addEventListener("submit", async event => {
-    event.preventDefault();
-
-    const result = normalizeCardInput({
-      name: $("cName").value,
-      limit: $("cLimit").value,
-      closing: $("cClosing").value,
-      due: $("cDue").value
-    });
-
-    if (!result.ok) {
-      showError(result.error);
-      return;
-    }
-
-    try {
-      await addRecord(state.db, "cards", result.data);
+  const cForm = $("cardForm");
+  if (cForm) {
+    cForm.onsubmit = async e => {
+      e.preventDefault();
+      await add("cards", {
+        name: $("cName").value.trim(),
+        limit: Number($("cLimit").value),
+        closing: Number($("cClosing").value),
+        due: Number($("cDue").value)
+      });
       $("cardDialog").close();
-      event.currentTarget.reset();
-      await refresh();
-    } catch (error) {
-      console.error(error);
-      showError("Não foi possível salvar o cartão.");
-    }
-  });
-
-  $("typeFilter")?.addEventListener("change", renderTransactions);
-
-  $("prevMonth").addEventListener("click", async () => {
-    state.currentDate.setDate(1);
-    state.currentDate.setMonth(state.currentDate.getMonth() - 1);
-    await refresh();
-  });
-
-  $("nextMonth").addEventListener("click", async () => {
-    state.currentDate.setDate(1);
-    state.currentDate.setMonth(state.currentDate.getMonth() + 1);
-    await refresh();
-  });
-
-  $("exportBackup")?.addEventListener("click", exportBackup);
-  $("importBackup")?.addEventListener("change", importBackup);
-}
-
-function renderDashboard() {
-  const transactions = monthTransactions();
-  const income = sum(transactions.filter(item => item.type === "income"));
-  const accountExpenses = sum(transactions.filter(item =>
-    item.type === "expense" && item.paymentMethod !== "credit"
-  ));
-  const creditExpenses = sum(transactions.filter(item =>
-    item.type === "expense" && item.paymentMethod === "credit"
-  ));
-
-  const key = monthKey(state.currentDate);
-  const throughSelectedMonth = state.transactions.filter(item => item.date.slice(0, 7) <= key);
-  const cumulativeIncome = sum(throughSelectedMonth.filter(item => item.type === "income"));
-  const cumulativeAccountExpenses = sum(throughSelectedMonth.filter(item =>
-    item.type === "expense" && item.paymentMethod !== "credit"
-  ));
-  const balance = cumulativeIncome - cumulativeAccountExpenses;
-
-  $("mReceitas").textContent = toMoney(income);
-  $("mDespesas").textContent = toMoney(accountExpenses);
-  $("mSaldo").textContent = toMoney(balance);
-  $("mCartao").textContent = toMoney(creditExpenses);
-
-  renderCharts({ income, accountExpenses, balance, creditExpenses, transactions });
-
-  const recent = [...transactions]
-    .sort((a, b) => b.date.localeCompare(a.date) || Number(b.id) - Number(a.id))
-    .slice(0, 6);
-
-  $("recentList").innerHTML = recent.length
-    ? recent.map(item => `
-      <div class="list-row">
-        <span class="muted">${escapeHTML(dateBR(item.date))}</span>
-        <span>
-          ${escapeHTML(item.description || item.category)}
-          ${item.paymentMethod === "credit" ? '<small class="tag">Cartão</small>' : ""}
-        </span>
-        <strong class="${item.type}">
-          ${item.type === "income" ? "+" : "−"} ${toMoney(item.amount)}
-        </strong>
-      </div>
-    `).join("")
-    : '<div class="muted">Nenhum lançamento neste mês.</div>';
-}
-
-function destroyCharts() {
-  for (const chart of Object.values(state.charts)) {
-    chart?.destroy();
+      e.target.reset();
+      await renderCards();
+    };
   }
-  state.charts.cashflow = null;
-  state.charts.categories = null;
+
+  if ($("typeFilter")) $("typeFilter").onchange = renderTransactions;
+  if ($("exportBackup")) $("exportBackup").onclick = exportBackup;
+  if ($("importBackup")) $("importBackup").onchange = importBackup;
+  if ($("prevMonth")) $("prevMonth").onclick = () => { currentDate.setMonth(currentDate.getMonth() - 1); refresh(); };
+  if ($("nextMonth")) $("nextMonth").onclick = () => { currentDate.setMonth(currentDate.getMonth() + 1); refresh(); };
 }
 
-function renderCharts({ income, accountExpenses, balance, creditExpenses, transactions }) {
-  destroyCharts();
+function openTransaction(type) {
+  $("transactionTitle").textContent = type === "expense" ? "Nova despesa" : "Nova receita";
+  $("transactionType").value = type;
+  $("tDate").value = new Date().toISOString().slice(0, 10);
+  
+  const cats = type === "expense" ? EXPENSE_CATEGORIES : INCOME_CATEGORIES;
+  $("tCategory").innerHTML = cats.map(x => `<option value="${escapeHTML(x)}">${escapeHTML(x)}</option>`).join("");
+  
+  const pmElem = $("tPaymentMethod");
+  if (pmElem) {
+    const pmLabel = $("paymentMethodGroup") || pmElem.closest("label");
+    if (pmLabel) {
+      pmLabel.style.display = (type === "expense") ? "block" : "none";
+    }
+    pmElem.value = "account";
+  }
 
-  if (typeof Chart === "undefined") return;
+  $("transactionDialog").showModal();
+}
 
-  const cashflowCanvas = $("cashflowChart");
-  if (cashflowCanvas) {
-    state.charts.cashflow = new Chart(cashflowCanvas, {
-      type: "bar",
-      data: {
-        labels: ["Receitas", "Saídas Conta", "Saldo Acumulado", "Cartão no mês"],
-        datasets: [{
-          data: [income, accountExpenses, balance, creditExpenses],
-          backgroundColor: ["#10b981", "#ef4444", "#38bdf8", "#f59e0b"],
-          borderRadius: 6
-        }]
-      },
-      options: {
-        responsive: true,
-        maintainAspectRatio: false,
-        plugins: {
-          legend: { display: false },
-          tooltip: { callbacks: { label: context => toMoney(context.raw) } }
+async function refresh() {
+  if ($("currentMonth")) $("currentMonth").textContent = monthName(currentDate);
+  await renderDashboard();
+  await renderTransactions();
+  await renderCards();
+}
+
+async function renderDashboard() {
+  const all = await getAll("transactions"), key = monthKey(currentDate);
+  const tx = all.filter(x => x.date && x.date.startsWith(key));
+  
+  const income = tx.filter(x => x.type === "income").reduce((a, x) => a + x.amount, 0);
+  const expense = tx.filter(x => x.type === "expense").reduce((a, x) => a + x.amount, 0);
+  const accountExpense = tx.filter(x => x.type === "expense" && x.paymentMethod !== "credit").reduce((a, x) => a + x.amount, 0);
+  const creditExpense = tx.filter(x => x.type === "expense" && x.paymentMethod === "credit").reduce((a, x) => a + x.amount, 0);
+  const balance = income - accountExpense;
+
+  if ($("mReceitas")) $("mReceitas").textContent = toMoney(income);
+  if ($("mDespesas")) $("mDespesas").textContent = toMoney(accountExpense);
+  if ($("mSaldo")) $("mSaldo").textContent = toMoney(balance);
+  if ($("mCartao")) $("mCartao").textContent = toMoney(creditExpense);
+
+  const byCat = {};
+  tx.filter(x => x.type === "expense").forEach(x => byCat[x.category] = (byCat[x.category] || 0) + x.amount);
+
+  if (typeof Chart !== "undefined") {
+    cashflowChart?.destroy();
+    categoryChart?.destroy();
+
+    const cfElem = $("cashflowChart");
+    if (cfElem) {
+      cashflowChart = new Chart(cfElem, {
+        type: "bar",
+        data: {
+          labels: ["Receitas", "Despesas Conta", "Cartão (A Vencer)"],
+          datasets: [{
+            data: [income, accountExpense, creditExpense],
+            backgroundColor: ["#18794e", "#a33b3b", "#2b6cb0"]
+          }]
         },
-        scales: {
-          y: {
-            beginAtZero: true,
-            ticks: {
-              color: "#94a3b8",
-              callback: value => `R$ ${Number(value).toLocaleString("pt-BR")}`
-            },
-            grid: { color: "rgba(255,255,255,0.05)" }
-          },
-          x: {
-            ticks: { color: "#f8fafc", font: { size: 11 } },
-            grid: { display: false }
-          }
-        }
-      }
-    });
+        options: { plugins: { legend: { display: false } }, responsive: true, maintainAspectRatio: false }
+      });
+    }
+
+    const catElem = $("categoryChart");
+    if (catElem) {
+      categoryChart = new Chart(catElem, {
+        type: "doughnut",
+        data: {
+          labels: Object.keys(byCat).length ? Object.keys(byCat).map(escapeHTML) : ["Sem despesas"],
+          datasets: [{ data: Object.values(byCat).length ? Object.values(byCat) : [1] }]
+        },
+        options: { plugins: { legend: { position: "bottom" } }, responsive: true }
+      });
+    }
   }
 
-  const byCategory = {};
-  transactions
-    .filter(item => item.type === "expense")
-    .forEach(item => {
-      byCategory[item.category] = (byCategory[item.category] || 0) + Number(item.amount);
-    });
-
-  const categoryCanvas = $("categoryChart");
-  if (categoryCanvas) {
-    const labels = Object.keys(byCategory);
-    state.charts.categories = new Chart(categoryCanvas, {
-      type: "doughnut",
-      data: {
-        labels: labels.length ? labels : ["Sem despesas"],
-        datasets: [{
-          data: labels.length ? Object.values(byCategory) : [1],
-          backgroundColor: [
-            "#38bdf8", "#10b981", "#f59e0b", "#ef4444",
-            "#8b5cf6", "#ec4899", "#14b8a6", "#64748b"
-          ],
-          borderWidth: 0
-        }]
-      },
-      options: {
-        responsive: true,
-        maintainAspectRatio: false,
-        plugins: {
-          legend: {
-            position: "bottom",
-            labels: { color: "#94a3b8", boxWidth: 12, padding: 10 }
-          },
-          tooltip: { callbacks: { label: context => `${context.label}: ${toMoney(context.raw)}` } }
-        }
-      }
-    });
+  const recent = [...tx].sort((a, b) => b.date.localeCompare(a.date)).slice(0, 6);
+  if ($("recentList")) {
+    $("recentList").innerHTML = recent.length ? recent.map(x => `
+      <div class="list-row">
+        <span class="muted">${dateBR(x.date)}</span>
+        <span>${escapeHTML(x.description || x.category)} ${x.paymentMethod === 'credit' ? '<small class="tag">Cartão</small>' : ''}</span>
+        <strong class="${x.type}">${x.type === "income" ? "+" : "−"} ${toMoney(x.amount)}</strong>
+      </div>`).join("") : `<div class="muted">Nenhum lançamento neste mês.</div>`;
   }
 }
 
-function renderTransactions() {
-  const filter = $("typeFilter")?.value || "all";
-  const transactions = monthTransactions()
-    .filter(item => filter === "all" || item.type === filter)
-    .sort((a, b) => b.date.localeCompare(a.date) || Number(b.id) - Number(a.id));
-
-  $("transactionsTable").innerHTML = transactions.length
-    ? transactions.map(item => `
+async function renderTransactions() {
+  const all = await getAll("transactions"), key = monthKey(currentDate);
+  const filterElem = $("typeFilter");
+  const filter = filterElem ? filterElem.value : "all";
+  
+  let tx = all.filter(x => x.date && x.date.startsWith(key) && (filter === "all" || x.type === filter)).sort((a, b) => b.date.localeCompare(a.date));
+  
+  if ($("transactionsTable")) {
+    $("transactionsTable").innerHTML = tx.length ? tx.map(x => `
       <tr>
-        <td>${escapeHTML(dateBR(item.date))}</td>
-        <td><span class="tag">${item.type === "income" ? "Receita" : "Despesa"}</span></td>
-        <td>${escapeHTML(item.category)}</td>
-        <td>
-          ${escapeHTML(item.description || "—")}
-          ${item.paymentMethod === "credit" ? '<span class="tag">Cartão</span>' : ""}
-        </td>
-        <td class="${item.type}">
-          ${item.type === "income" ? "+" : "−"} ${toMoney(item.amount)}
-        </td>
-        <td><button type="button" class="delete" data-delete="${Number(item.id)}">Excluir</button></td>
-      </tr>
-    `).join("")
-    : '<tr><td colspan="6" class="muted">Nenhum lançamento.</td></tr>';
-}
+        <td>${dateBR(x.date)}</td>
+        <td><span class="tag">${x.type === "income" ? "Receita" : "Despesa"}</span></td>
+        <td>${escapeHTML(x.category)}</td>
+        <td>${escapeHTML(x.description || "—")} ${x.paymentMethod === "credit" ? '<span class="tag" style="background:#e2e8f0;">Cartão</span>' : ''}</td>
+        <td class="${x.type}">${x.type === "income" ? "+" : "−"} ${toMoney(x.amount)}</td>
+        <td><button class="delete" data-delete="${x.id}">Excluir</button></td>
+      </tr>`).join("") : `<tr><td colspan="6" class="muted">Nenhum lançamento.</td></tr>`;
 
-function renderCards() {
-  const transactions = monthTransactions();
-  const creditTransactions = transactions.filter(item =>
-    item.type === "expense" && item.paymentMethod === "credit"
-  );
-
-  const unassignedTotal = sum(creditTransactions.filter(item => !item.cardId));
-
-  $("cardsList").innerHTML = state.cards.length
-    ? state.cards.map(card => {
-      const cardSpent = sum(creditTransactions.filter(item => Number(item.cardId) === Number(card.id)));
-      const estimatedAvailable = Number(card.limit || 0) - cardSpent;
-
-      return `
-        <div class="credit-card">
-          <h3>${escapeHTML(card.name)}</h3>
-          <p><span>Limite total</span><strong>${toMoney(card.limit)}</strong></p>
-          <p><span>Fechamento</span><strong>dia ${Number(card.closing)}</strong></p>
-          <p><span>Vencimento</span><strong>dia ${Number(card.due)}</strong></p>
-          <p><span>Compras deste mês</span><strong>${toMoney(cardSpent)}</strong></p>
-          <p><span>Limite após compras do mês*</span><strong>${toMoney(estimatedAvailable)}</strong></p>
-          <button type="button" class="delete" data-card-delete="${Number(card.id)}">
-            Excluir cartão
-          </button>
-        </div>
-      `;
-    }).join("")
-    : '<div class="muted">Nenhum cartão cadastrado.</div>';
-
-  if (unassignedTotal > 0) {
-    $("cardsList").insertAdjacentHTML("beforeend", `
-      <p class="muted">
-        ${toMoney(unassignedTotal)} em compras no cartão neste mês não estão associadas
-        a um cartão específico (por exemplo, lançamentos antigos).
-      </p>
-    `);
-  }
-
-  if (state.cards.length) {
-    $("cardsList").insertAdjacentHTML("beforeend", `
-      <p class="muted">
-        *Estimativa baseada apenas nas compras lançadas neste mês; não representa a fatura
-        ou o limite disponível informado pelo banco.
-      </p>
-    `);
-  }
-}
-
-document.addEventListener("click", async event => {
-  const deleteTransactionButton = event.target.closest("[data-delete]");
-  const deleteCardButton = event.target.closest("[data-card-delete]");
-
-  try {
-    if (deleteTransactionButton) {
-      if (!window.confirm("Excluir este lançamento?")) return;
-
-      await removeRecord(state.db, "transactions", Number(deleteTransactionButton.dataset.delete));
-      await refresh();
-      return;
-    }
-
-    if (deleteCardButton) {
-      const cardId = Number(deleteCardButton.dataset.cardDelete);
-      const hasTransactions = state.transactions.some(item => Number(item.cardId) === cardId);
-
-      if (hasTransactions) {
-        showError("Este cartão está associado a lançamentos. Não é possível excluí-lo.");
-        return;
+    document.querySelectorAll("[data-delete]").forEach(b => b.onclick = async () => {
+      if (confirm("Excluir este lançamento?")) {
+        await remove("transactions", Number(b.dataset.delete));
+        await refresh();
       }
-
-      if (!window.confirm("Excluir este cartão?")) return;
-
-      await removeRecord(state.db, "cards", cardId);
-      await refresh();
-    }
-  } catch (error) {
-    console.error(error);
-    showError("Não foi possível concluir a operação.");
+    });
   }
-});
+}
+
+async function renderCards() {
+  const cards = await getAll("cards");
+  const allTx = await getAll("transactions");
+  const key = monthKey(currentDate);
+
+  const creditTx = allTx.filter(x => x.date && x.date.startsWith(key) && x.type === "expense" && x.paymentMethod === "credit");
+  const totalCreditMonth = creditTx.reduce((a, x) => a + x.amount, 0);
+
+  if ($("cardsList")) {
+    $("cardsList").innerHTML = cards.length ? cards.map(c => `
+      <div class="credit-card">
+        <h3>${escapeHTML(c.name)}</h3>
+        <p><span>Limite Total</span><strong>${toMoney(c.limit)}</strong></p>
+        <p><span>Fechamento</span><strong>dia ${c.closing}</strong></p>
+        <p><span>Vencimento</span><strong>dia ${c.due}</strong></p>
+        <p><span>Compras (Mês)</span><strong>${toMoney(totalCreditMonth)}</strong></p>
+        <p><span>Limite Disponível</span><strong>${toMoney(c.limit - totalCreditMonth)}</strong></p>
+        <button class="delete" style="margin-top:10px;" data-card-delete="${c.id}">Excluir cartão</button>
+      </div>`).join("") : `<div class="muted">Nenhum cartão cadastrado.</div>`;
+
+    document.querySelectorAll("[data-card-delete]").forEach(b => b.onclick = async () => {
+      if (confirm("Excluir este cartão?")) {
+        await remove("cards", Number(b.dataset.cardDelete));
+        await renderCards();
+      }
+    });
+  }
+}
 
 async function exportBackup() {
-  try {
-    const backup = {
-      version: 1,
-      exportedAt: new Date().toISOString(),
-      transactions: state.transactions,
-      cards: state.cards
-    };
-
-    const blob = new Blob([JSON.stringify(backup, null, 2)], {
-      type: "application/json"
-    });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-
-    link.href = url;
-    link.download = `financeiro-backup-${localDateInputValue()}.json`;
-    link.click();
-
-    window.setTimeout(() => URL.revokeObjectURL(url), 1000);
-  } catch (error) {
-    console.error(error);
-    showError("Não foi possível exportar o backup.");
-  }
+  const data = {
+    version: 1,
+    exportedAt: new Date().toISOString(),
+    transactions: await getAll("transactions"),
+    cards: await getAll("cards")
+  };
+  const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = `financeiro-backup-${new Date().toISOString().slice(0, 10)}.json`;
+  a.click();
+  URL.revokeObjectURL(a.href);
 }
 
-async function importBackup(event) {
-  const file = event.target.files?.[0];
+function importBackup(e) {
+  const file = e.target.files[0];
   if (!file) return;
-
-  try {
-    const payload = JSON.parse(await file.text());
-    const validation = validateBackupPayload(payload);
-
-    if (!validation.ok) {
-      throw new Error(validation.error);
+  const r = new FileReader();
+  r.onload = async () => {
+    try {
+      const d = JSON.parse(r.result);
+      if (!Array.isArray(d.transactions) || !Array.isArray(d.cards)) throw Error("Formato inválido");
+      
+      const txStore = store("transactions", "readwrite");
+      const cardStore = store("cards", "readwrite");
+      
+      (await getAll("transactions")).forEach(x => txStore.delete(x.id));
+      (await getAll("cards")).forEach(x => cardStore.delete(x.id));
+      
+      d.transactions.forEach(x => { delete x.id; txStore.add(x); });
+      d.cards.forEach(x => { delete x.id; cardStore.add(x); });
+      
+      txStore.transaction.oncomplete = async () => {
+        alert("Backup restaurado com sucesso!");
+        await refresh();
+      };
+    } catch (err) {
+      alert("Arquivo de backup inválido: " + err.message);
     }
-
-    if (!window.confirm(
-      "A importação substituirá todos os lançamentos e cartões deste navegador. Continuar?"
-    )) {
-      return;
-    }
-
-    await importBackupRecords(state.db, validation.data);
-    await refresh();
-    showError("Backup restaurado com sucesso.");
-  } catch (error) {
-    console.error(error);
-    showError(error.message || "Arquivo de backup inválido.");
-  } finally {
-    event.target.value = "";
-  }
+  };
+  r.readAsText(file);
+  e.target.value = "";
 }
 
-async function initialize() {
-  setupNavigation();
+// Global initialization
+document.addEventListener("DOMContentLoaded", async () => {
+  setupNav();
   setupForms();
-
   try {
-    state.db = await openDB();
+    await openDB();
     await refresh();
-  } catch (error) {
-    console.error(error);
-    showError(error.message || "Não foi possível iniciar o aplicativo.");
+  } catch (err) {
+    console.error("Erro ao inicializar banco de dados:", err);
   }
-}
-
-initialize();
+});

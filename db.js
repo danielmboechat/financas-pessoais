@@ -1,7 +1,7 @@
 const DB_NAME = "financeiro_pessoal_v1", DB_VERSION = 1;
 let db;
 
-export function openDB() {
+function openDB() {
   return new Promise((resolve, reject) => {
     const r = indexedDB.open(DB_NAME, DB_VERSION);
     r.onupgradeneeded = e => {
@@ -19,22 +19,7 @@ export function openDB() {
   });
 }
 
-export const store = (name, mode = "readonly") => db.transaction(name, mode).objectStore(name);
-
-export const getAll = name => new Promise((res, rej) => { 
-  const r = store(name).getAll(); 
-  r.onsuccess = () => res(r.result); 
-  r.onerror = () => rej(r.error); 
-});
-
-export const add = (name, obj) => new Promise((res, rej) => { 
-  const r = store(name, "readwrite").add(obj); 
-  r.onsuccess = () => res(r.result); 
-  r.onerror = () => rej(r.error); 
-});
-
-export const remove = (name, id) => new Promise((res, rej) => { 
-  const r = store(name, "readwrite").delete(id); 
-  r.onsuccess = () => res(); 
-  r.onerror = () => rej(r.error); 
-});
+const store = (name, mode = "readonly") => db.transaction(name, mode).objectStore(name);
+const getAll = name => new Promise((res, rej) => { const r = store(name).getAll(); r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error); });
+const add = (name, obj) => new Promise((res, rej) => { const r = store(name, "readwrite").add(obj); r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error); });
+const remove = (name, id) => new Promise((res, rej) => { const r = store(name, "readwrite").delete(id); r.onsuccess = () => res(); r.onerror = () => rej(r.error); });
