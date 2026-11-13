@@ -6,7 +6,8 @@ export const EXPENSE_CATEGORIES = [
   "Assinaturas",
   "Educação",
   "Viagens",
-  "Outros"
+  "Outros",
+  "Fatura Cartão"
 ];
 
 export const INCOME_CATEGORIES = ["salário", "outros recebimentos"];
@@ -64,11 +65,6 @@ function normalizeId(value, label) {
   return { ok: true, id };
 }
 
-/**
- * Set requireCardForCredit to true for a new credit-card transaction.
- * It remains false by default so older backups with unassigned card purchases
- * can still be imported.
- */
 export function normalizeTransactionInput(input, { requireCardForCredit = false } = {}) {
   if (!input || typeof input !== "object") {
     return { ok: false, error: "Lançamento inválido." };
@@ -107,9 +103,10 @@ export function normalizeTransactionInput(input, { requireCardForCredit = false 
   if (input.cardId !== undefined && input.cardId !== null && input.cardId !== "") {
     const parsedCardId = Number(input.cardId);
     if (!Number.isInteger(parsedCardId) || parsedCardId <= 0) {
-      return { ok: false, error: "Cartão inválido." };
+      cardId = undefined;
+    } else {
+      cardId = parsedCardId;
     }
-    cardId = parsedCardId;
   }
 
   if (type === "expense" && paymentMethod === "credit" &&
@@ -212,24 +209,14 @@ export function validateBackupPayload(payload) {
     .map(card => card.id)
     .filter(id => id !== undefined);
 
-  if (new Set(cardIds).size !== cardIds.length) {
-    return { ok: false, error: "O backup contém cartões duplicados." };
-  }
-
-  const transactionIds = transactions
-    .map(transaction => transaction.id)
-    .filter(id => id !== undefined);
-
-  if (new Set(transactionIds).size !== transactionIds.length) {
-    return { ok: false, error: "O backup contém lançamentos duplicados." };
-  }
-
   const knownCardIds = new Set(cardIds);
   for (const transaction of transactions) {
-    if (transaction.cardId !== undefined &&
-        cardIds.length > 0 &&
-        !knownCardIds.has(transaction.cardId)) {
-      return { ok: false, error: "Há lançamentos associados a cartões inexistentes no backup." };
+    if (transaction.cardId !== undefined && !knownCardIds.has(transaction.cardId)) {
+      if (cardIds.length === 1) {
+        transaction.cardId = cardIds[0];
+      } else {
+        delete transaction.cardId;
+      }
     }
   }
 
