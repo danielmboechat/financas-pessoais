@@ -15,19 +15,31 @@
   <meta name="apple-mobile-web-app-title" content="Finanças">
   <link rel="apple-touch-icon" href="icon-192.png">
 
-  <link rel="stylesheet" href="style.css">
+  <link rel="stylesheet" href="style.css?v=1.4">
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 </head>
 <body>
   <aside class="sidebar">
     <div class="brand">FINANCEIRO</div>
     <nav>
-      <button class="nav active" data-view="dashboard">Dashboard</button>
-      <button class="nav" data-view="lancamentos">Lançamentos</button>
-      <button class="nav" data-view="cartoes">Cartões</button>
-      <button class="nav" data-view="backup">Backup</button>
+      <button class="nav active" data-view="dashboard">
+        <span class="nav-icon">📊</span>
+        <span>Dashboard</span>
+      </button>
+      <button class="nav" data-view="lancamentos">
+        <span class="nav-icon">📝</span>
+        <span>Lançamentos</span>
+      </button>
+      <button class="nav" data-view="cartoes">
+        <span class="nav-icon">💳</span>
+        <span>Cartões</span>
+      </button>
+      <button class="nav" data-view="backup">
+        <span class="nav-icon">💾</span>
+        <span>Backup</span>
+      </button>
     </nav>
-    <div class="sidebar-footer">V1.1 PWA · dados locais</div>
+    <div class="sidebar-footer">V1.4 PWA · dados locais</div>
   </aside>
 
   <main>
@@ -52,14 +64,14 @@
 
       <div class="cards">
         <article class="metric"><span>Receitas</span><strong id="mReceitas">R$ 0,00</strong></article>
-        <article class="metric"><span>Despesas</span><strong id="mDespesas">R$ 0,00</strong></article>
-        <article class="metric"><span>Saldo do mês</span><strong id="mSaldo">R$ 0,00</strong></article>
-        <article class="metric"><span>Lançamentos</span><strong id="mLancamentos">0</strong></article>
+        <article class="metric"><span>Saídas da Conta</span><strong id="mDespesas">R$ 0,00</strong></article>
+        <article class="metric"><span>Resultado Caixa</span><strong id="mSaldo">R$ 0,00</strong></article>
+        <article class="metric"><span>Cartão (A Vencer)</span><strong id="mCartao">R$ 0,00</strong></article>
       </div>
 
       <div class="grid-2">
         <article class="panel chart-panel">
-          <div class="panel-head"><h2>Receitas x despesas</h2></div>
+          <div class="panel-head"><h2>Fluxo de Caixa e Cartão</h2></div>
           <canvas id="cashflowChart"></canvas>
         </article>
         <article class="panel chart-panel">
@@ -160,23 +172,6 @@
         </select>
       </label>
 
-      <label id="installmentsGroup" style="display: none;">Parcelas
-        <select id="tInstallments">
-          <option value="1">1x (À vista no cartão)</option>
-          <option value="2">2x</option>
-          <option value="3">3x</option>
-          <option value="4">4x</option>
-          <option value="5">5x</option>
-          <option value="6">6x</option>
-          <option value="7">7x</option>
-          <option value="8">8x</option>
-          <option value="9">9x</option>
-          <option value="10">10x</option>
-          <option value="11">11x</option>
-          <option value="12">12x</option>
-        </select>
-      </label>
-
       <label>Descrição
         <input type="text" id="tDescription" maxlength="100" placeholder="Ex.: Mercado / Geladeira">
       </label>
@@ -210,14 +205,12 @@
     </form>
   </dialog>
 
-  <script src="app.js"></script>
+  <script src="app.js?v=1.4"></script>
   <script>
     if ('serviceWorker' in navigator) {
       window.addEventListener('load', () => {
-        navigator.serviceWorker.register('./sw.js').then(reg => {
-          console.log('Service Worker registrado.');
-        }).catch(err => {
-          console.warn('Erro Service Worker:', err);
+        navigator.serviceWorker.register('./sw.js?v=1.4').then(reg => {
+          console.log('Service Worker v1.4 registrado.');
         });
       });
     }
