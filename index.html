@@ -15,7 +15,7 @@
   <meta name="apple-mobile-web-app-title" content="Finanças">
   <link rel="apple-touch-icon" href="icon-192.png">
 
-  <link rel="stylesheet" href="style.css?v=1.4">
+  <link rel="stylesheet" href="style.css?v=1.5">
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 </head>
 <body>
@@ -23,23 +23,19 @@
     <div class="brand">FINANCEIRO</div>
     <nav>
       <button class="nav active" data-view="dashboard">
-        <span class="nav-icon">📊</span>
         <span>Dashboard</span>
       </button>
       <button class="nav" data-view="lancamentos">
-        <span class="nav-icon">📝</span>
         <span>Lançamentos</span>
       </button>
       <button class="nav" data-view="cartoes">
-        <span class="nav-icon">💳</span>
         <span>Cartões</span>
       </button>
       <button class="nav" data-view="backup">
-        <span class="nav-icon">💾</span>
         <span>Backup</span>
       </button>
     </nav>
-    <div class="sidebar-footer">V1.4 PWA · dados locais</div>
+    <div class="sidebar-footer">V1.5 PWA · dados locais</div>
   </aside>
 
   <main>
@@ -63,20 +59,24 @@
       </div>
 
       <div class="cards">
-        <article class="metric"><span>Receitas</span><strong id="mReceitas">R$ 0,00</strong></article>
+        <article class="metric"><span>Receitas (Mês)</span><strong id="mReceitas">R$ 0,00</strong></article>
         <article class="metric"><span>Saídas da Conta</span><strong id="mDespesas">R$ 0,00</strong></article>
-        <article class="metric"><span>Resultado Caixa</span><strong id="mSaldo">R$ 0,00</strong></article>
+        <article class="metric"><span>Saldo Final em Conta</span><strong id="mSaldo">R$ 0,00</strong></article>
         <article class="metric"><span>Cartão (A Vencer)</span><strong id="mCartao">R$ 0,00</strong></article>
       </div>
 
       <div class="grid-2">
         <article class="panel chart-panel">
           <div class="panel-head"><h2>Fluxo de Caixa e Cartão</h2></div>
-          <canvas id="cashflowChart"></canvas>
+          <div class="chart-wrapper">
+            <canvas id="cashflowChart"></canvas>
+          </div>
         </article>
         <article class="panel chart-panel">
-          <div class="panel-head"><h2>Despesas por categoria</h2></div>
-          <canvas id="categoryChart"></canvas>
+          <div class="panel-head"><h2>Despesas por Categoria</h2></div>
+          <div class="chart-wrapper">
+            <canvas id="categoryChart"></canvas>
+          </div>
         </article>
       </div>
 
@@ -208,12 +208,12 @@
     </form>
   </dialog>
 
-  <script src="app.js?v=1.4"></script>
+  <script src="app.js?v=1.5"></script>
   <script>
     if ('serviceWorker' in navigator) {
       window.addEventListener('load', () => {
-        navigator.serviceWorker.register('./sw.js?v=1.4').then(reg => {
-          console.log('Service Worker v1.4 registrado.');
+        navigator.serviceWorker.register('./sw.js?v=1.5').then(reg => {
+          console.log('Service Worker v1.5 registrado.');
         });
       });
     }
